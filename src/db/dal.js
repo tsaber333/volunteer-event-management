@@ -1362,18 +1362,6 @@ const publicDal = {
           GROUP BY sa.time_block_id
         `).all([...schedIds, eid]);
         rows.forEach(row => schedCounts.set(Number(row.time_block_id), Number(row.cnt || 0)));
-        if (debugInfo) {
-          debugInfo.rawSchedCounts = rows;
-          debugInfo.schedRows = db.prepare(`
-            SELECT sa.time_block_id, sa.participant_id, sa.assignment_id, p.registration_id, r.registrant_email
-            FROM schedule_assignments sa
-            JOIN participants p ON p.participant_id = sa.participant_id
-            JOIN registrations r ON r.registration_id = p.registration_id
-            JOIN time_blocks tb ON tb.block_id = sa.time_block_id
-            JOIN stations s ON s.station_id = tb.station_id
-            WHERE sa.time_block_id IN (${placeholders}) AND s.event_id = ?
-          `).all([...schedIds, eid]);
-        }
       }
       const potCounts = new Map();
       if (potIds.length) {
@@ -1387,9 +1375,6 @@ const publicDal = {
           GROUP BY pa.item_id
         `).all([...potIds, eid]);
         rows.forEach(row => potCounts.set(Number(row.item_id), Number(row.cnt || 0)));
-        if (debugInfo) {
-          debugInfo.rawPotCounts = rows;
-        }
       }
 
       const pendingSched = new Map();
