@@ -87,10 +87,11 @@
           </li>
         <% } else { %>
           <li><a href="/help">Help</a></li>
+          <li class="topbar__menu-login"><a href="/auth/google">Admin Login</a></li>
         <% } %>
       </ul>
     </nav>
-    <div class="topbar__actions" aria-label="Account actions">
+    <div class="topbar__actions<%= user ? '' : ' topbar__actions--guest' %>" aria-label="Account actions">
       <% if (user) { %>
         <details class="account-menu">
           <summary class="account-summary">
