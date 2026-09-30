@@ -91,8 +91,8 @@
         <% } %>
       </ul>
     </nav>
-    <div class="topbar__actions<%= user ? '' : ' topbar__actions--guest' %>" aria-label="Account actions">
-      <% if (user) { %>
+    <% if (user) { %>
+      <div class="topbar__actions" aria-label="Account actions">
         <details class="account-menu">
           <summary class="account-summary">
             <span class="account-initials" aria-hidden="true"><%= accountInitial %></span>
@@ -107,10 +107,8 @@
             <a class="account-menu__link" href="/logout">Logout</a>
           </div>
         </details>
-      <% } else { %>
-        <a class="btn btn-primary" href="/auth/google">Admin Login</a>
-      <% } %>
-    </div>
+      </div>
+    <% } %>
   </div>
 </header>
 <main class="app-main">
