@@ -4232,6 +4232,13 @@ textarea {
 .positions__control { display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 600; font-size: 0.92rem; }
 .positions__control select { min-width: 9.5rem; padding: 0.45rem 2rem 0.45rem 0.75rem; }
 .positions__control--check input { width: 18px; height: 18px; accent-color: var(--brand); }
+.positions__who { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border-soft); }
+.positions__who label { font-weight: 700; }
+.positions__who select { min-width: 12rem; padding: 0.45rem 2rem 0.45rem 0.75rem; font-weight: 600; }
+.positions__who select[hidden] { display: none; }
+.positions__who-hint { flex: 1 1 16rem; font-size: 0.88rem; color: var(--text-muted); }
+.positions__who-new { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.positions__who-new input { width: 14rem; max-width: 100%; padding: 0.45rem 0.6rem; border: 1px solid var(--border, #cbd5e1); border-radius: 8px; font: inherit; }
 
 .positions__station.card { padding: 1.1rem 1.1rem 1.2rem; }
 .positions__station.card:hover { transform: none; box-shadow: var(--shadow-sm); }
@@ -4355,8 +4362,10 @@ textarea {
 }
 .pick__who, .pick__dish { display: grid; gap: 0.2rem; min-width: 0; }
 .pick__label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-soft); }
-.pick__who select {
-  width: 100%;
+.pick__who select { width: 100%; }
+.pick__who select,
+.positions__who select,
+.positions__control select {
   padding-right: 2rem;
   background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%), linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
   background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%;

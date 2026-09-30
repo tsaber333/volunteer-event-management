@@ -99,6 +99,18 @@
   } else {
     people.push({ key: 'me', name: '', isRegistrant: true });
   }
+  // Who new "Sign up" presses go to (the "Signing up:" chooser).
+  let preferredKey = people.length ? people[0].key : null;
+
+  // Drop "someone else" people who no longer fill any spot, so a removed
+  // person isn't silently reused for the next pick.
+  function prunePeople() {
+    for (let i = people.length - 1; i >= 0; i -= 1) {
+      const p = people[i];
+      if (p.isRegistrant || p.id || p.key === preferredKey) continue;
+      if (!picks.some(k => k.personKey === p.key)) people.splice(i, 1);
+    }
+  }
 
   // Returns null, { type: 'same' }, or { type: 'overlap', stationName }.
   function conflictFor(personKey, blockId, exceptUid) {
@@ -133,9 +145,17 @@
     return slot.capacity - used;
   }
 
+  // The chosen person if free; otherwise someone already filling other spots.
+  // Never falls back to "Me" unless "Me" is the chosen person or already has spots.
   function firstAvailablePerson(blockId) {
-    const free = people.find(p => !conflictFor(p.key, blockId, null));
-    return free ? free.key : '';
+    const isFree = p => p && !conflictFor(p.key, blockId, null);
+    const preferred = preferredKey ? personByKey(preferredKey) : null;
+    if (isFree(preferred)) return preferred.key;
+    const active = people.find(p => picks.some(k => k.personKey === p.key) && isFree(p));
+    if (active) return active.key;
+    if (preferred) return '';
+    const any = people.find(isFree);
+    return any ? any.key : '';
   }
 
   function addPick(blockId, personKey, dishName, opts) {
@@ -165,9 +185,7 @@
       .join(';');
   }
   function isDirty() {
-    if (isManage) return signature() !== savedSignature;
-    // After a duplicate-email check the server holds these picks, so leaving is safe.
-    return picks.length > 0 && signature() !== savedSignature;
+    return isManage ? signature() !== savedSignature : picks.length > 0;
   }
 
   // ---- Rendering: picks panel -------------------------------------------
@@ -508,6 +526,92 @@
   if (onlyOpen) onlyOpen.addEventListener('change', applyOnlyOpen);
   if (viewMode) viewMode.addEventListener('change', applyViewMode);
 
+  // ---- "Signing up:" chooser ----------------------------------------------
+  const toolbar = positionsRoot.querySelector('.positions__toolbar');
+  let chooser = null;
+  let chooserSelect = null;
+  if (toolbar) {
+    chooser = document.createElement('div');
+    chooser.className = 'positions__who';
+    const label = document.createElement('label');
+    label.setAttribute('for', 'signup-who');
+    label.textContent = 'Signing up:';
+    chooserSelect = document.createElement('select');
+    chooserSelect.id = 'signup-who';
+    const hint = document.createElement('span');
+    hint.className = 'positions__who-hint';
+    hint.textContent = isManage
+      ? `Each “Sign up” goes to this person.`
+      : `Each “Sign up” goes to this person. Not coming yourself? Choose “Someone else…”.`;
+    chooser.appendChild(label);
+    chooser.appendChild(chooserSelect);
+    chooser.appendChild(hint);
+    toolbar.insertBefore(chooser, toolbar.firstChild);
+    chooserSelect.addEventListener('change', () => {
+      if (chooserSelect.value === NEW_PERSON) { openChooserName(); return; }
+      preferredKey = chooserSelect.value || null;
+      refresh();
+    });
+  }
+
+  function renderChooser() {
+    if (!chooserSelect || chooser.querySelector('.positions__who-new')) return;
+    chooserSelect.textContent = '';
+    people.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.key;
+      opt.textContent = personLabel(p);
+      if (p.key === preferredKey) opt.selected = true;
+      chooserSelect.appendChild(opt);
+    });
+    const other = document.createElement('option');
+    other.value = NEW_PERSON;
+    other.textContent = 'Someone else…';
+    chooserSelect.appendChild(other);
+  }
+
+  function openChooserName() {
+    chooserSelect.hidden = true;
+    const wrap = document.createElement('div');
+    wrap.className = 'positions__who-new';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.maxLength = 100;
+    input.placeholder = 'Their full name';
+    input.setAttribute('aria-label', 'Name of the person you are signing up');
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'btn btn-primary small';
+    add.textContent = 'Use';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'btn btn-link small';
+    cancel.textContent = 'Cancel';
+    const close = () => {
+      wrap.remove();
+      chooserSelect.hidden = false;
+      refresh();
+    };
+    const commit = () => {
+      const person = addPerson(input.value);
+      if (!person) { input.focus({ preventScroll: true }); return; }
+      preferredKey = person.key;
+      close();
+      toast(`Now signing up ${personLabel(person)}. Press “Sign up” on the spots for them.`);
+    };
+    add.addEventListener('click', commit);
+    cancel.addEventListener('click', close);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      if (e.key === 'Escape') { e.preventDefault(); close(); }
+    });
+    wrap.appendChild(input);
+    wrap.appendChild(add);
+    wrap.appendChild(cancel);
+    chooserSelect.insertAdjacentElement('afterend', wrap);
+    input.focus({ preventScroll: true });
+  }
+
   // ---- Feedback ----------------------------------------------------------
   function toast(message) {
     let host = document.getElementById('toast-root');
@@ -591,9 +695,57 @@
   }
   function updatePayload() {
     if (payloadInput) payloadInput.value = JSON.stringify(buildPayload());
+    saveLocalDraft();
+  }
+
+  // ---- Keep sign-up picks in this tab (so links can be used freely) --------
+  const draftKey = `signup-draft:${cfg.eventId}`;
+  function saveLocalDraft() {
+    if (isManage) return;
+    try {
+      if (!picks.length) { sessionStorage.removeItem(draftKey); return; }
+      sessionStorage.setItem(draftKey, JSON.stringify({
+        people: people.filter(p => !p.isRegistrant).map(p => ({ key: p.key, name: p.name })),
+        picks: picks.map(p => ({ blockId: p.blockId, personKey: p.personKey, dishName: p.dishName || '' })),
+        preferredKey,
+        contact: {
+          name: nameInput ? nameInput.value : '',
+          email: emailInput ? emailInput.value : '',
+          phone: phoneInput ? phoneInput.value : ''
+        }
+      }));
+    } catch (_) { /* storage unavailable (private mode, quota) */ }
+  }
+  function clearLocalDraft() {
+    try { sessionStorage.removeItem(draftKey); } catch (_) { /* ignore */ }
+  }
+  function restoreLocalDraft() {
+    let data = null;
+    try { data = JSON.parse(sessionStorage.getItem(draftKey) || 'null'); } catch (_) { return 0; }
+    if (!data || !Array.isArray(data.picks)) return 0;
+    const contact = data.contact || {};
+    [[nameInput, contact.name], [emailInput, contact.email], [phoneInput, contact.phone]].forEach(([input, value]) => {
+      if (input && !input.value && value) input.value = String(value);
+    });
+    const keyMap = new Map([['me', 'me']]);
+    (Array.isArray(data.people) ? data.people : []).forEach(p => {
+      const person = p ? addPerson(p.name) : null;
+      if (person) keyMap.set(p.key, person.key);
+    });
+    let restored = 0;
+    data.picks.forEach(p => {
+      const blockId = Number(p && p.blockId);
+      const key = keyMap.get(p.personKey) || '';
+      if (key && conflictFor(key, blockId, null)) return;
+      if (addPick(blockId, key, p.dishName || '')) restored += 1;
+    });
+    if (data.preferredKey && keyMap.has(data.preferredKey)) preferredKey = keyMap.get(data.preferredKey);
+    return restored;
   }
 
   function refresh() {
+    prunePeople();
+    renderChooser();
     renderPicks();
     renderSlots();
     updatePayload();
@@ -779,7 +931,7 @@
         const data = await resp.json();
         if (data && data.duplicate) {
           if (submitBtn) submitBtn.disabled = false;
-          savedSignature = signature();
+          clearLocalDraft();
           showError('This email already has a sign-up for this event. We just emailed you a link — open it in this browser to see what you already have, with these picks waiting for you to review and save.', emailInput);
           return;
         }
@@ -788,14 +940,18 @@
       console.warn('[Signup] Duplicate check failed; submitting anyway.', err);
     }
     submitting = true;
+    clearLocalDraft();
     form.submit();
   });
 
-  window.addEventListener('beforeunload', (e) => {
-    if (submitting || !isDirty()) return;
-    e.preventDefault();
-    e.returnValue = '';
-  });
+  // Sign-up picks are kept in sessionStorage; only the manage page warns.
+  if (isManage) {
+    window.addEventListener('beforeunload', (e) => {
+      if (submitting || !isDirty()) return;
+      e.preventDefault();
+      e.returnValue = '';
+    });
+  }
 
   // Manage page: forms that reload the page would drop unsaved picks.
   document.querySelectorAll('form[data-guard-dirty]').forEach(f => {
@@ -820,7 +976,13 @@
       refresh();
     });
   }
-  if (emailInput) emailInput.addEventListener('input', () => emailInput.classList.remove('input-error'));
+  if (emailInput) {
+    emailInput.addEventListener('input', () => {
+      emailInput.classList.remove('input-error');
+      saveLocalDraft();
+    });
+  }
+  if (phoneInput) phoneInput.addEventListener('input', saveLocalDraft);
 
   // ---- Initial state -----------------------------------------------------
   if (isManage) {
@@ -869,6 +1031,9 @@
     (Array.isArray(draft.potluckAssignments) ? draft.potluckAssignments : []).forEach(a => {
       addPick(Number(a.itemId), keyForIndex(a.participantIndex), a.dishName || '', { force: true });
     });
+  } else {
+    const restored = restoreLocalDraft();
+    if (restored) toast(`We kept the ${restored} ${restored === 1 ? spotWord : spotWord + 's'} you picked.`);
   }
 
   refresh();
