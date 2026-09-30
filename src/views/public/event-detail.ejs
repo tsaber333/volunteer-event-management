@@ -141,7 +141,7 @@
 
   <% if (!mine) { %>
     <section class="page-section page-shell" id="signup-step" aria-labelledby="signup-step-heading">
-      <h3 id="signup-step-heading" class="step-heading">Step 2: Tell us who’s coming</h3>
+      <h3 id="signup-step-heading" class="step-heading">Step 2: Review and confirm</h3>
       <article class="card card--plain signup-panel">
         <p class="muted" data-role="picks-empty">Tap “Sign up” on any <%= spotWord %> above. Your picks will show up here.</p>
         <form id="signup-form" action="/signup" method="POST" novalidate data-role="picks-form" hidden>
@@ -151,7 +151,14 @@
           <div class="notice notice--error" data-role="form-error" role="alert" hidden></div>
 
           <fieldset class="signup-fieldset">
+            <legend>Your picks <span class="selection-count-badge" data-role="picks-count"></span></legend>
+            <p class="muted small">Check who’s filling each <%= spotWord %>. One person can’t take the same <%= spotWord %> twice<%= (!isPotluck && !event.allow_overlap) ? ' or two spots at the same time' : '' %>.</p>
+            <ul class="pick-list" data-role="picks-list"></ul>
+          </fieldset>
+
+          <fieldset class="signup-fieldset">
             <legend>Your contact info</legend>
+            <p class="muted small">So we can reach you — you don’t have to fill a <%= spotWord %> yourself.</p>
             <div class="form-grid two">
               <div class="form-group">
                 <label for="signup-name">Your name</label>
@@ -167,12 +174,6 @@
               </div>
             </div>
             <p class="muted small">We’ll email a confirmation with a link to see, change, or add to your sign-up.</p>
-          </fieldset>
-
-          <fieldset class="signup-fieldset">
-            <legend>Who’s filling each <%= spotWord %>? <span class="selection-count-badge" data-role="picks-count"></span></legend>
-            <p class="muted small">You don’t have to fill a spot yourself — your name and email are just so we can reach you. You can change who fills each spot below. One person can’t take the same <%= spotWord %> twice<%= (!isPotluck && !event.allow_overlap) ? ' or two spots at the same time' : '' %>.</p>
-            <ul class="pick-list" data-role="picks-list"></ul>
           </fieldset>
 
           <div class="card-actions">
