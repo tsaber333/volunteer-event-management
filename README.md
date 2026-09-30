@@ -52,7 +52,7 @@ Run `npm run init-db` anytime to (re)create the SQLite schema in `db/volunteer.d
 | `MAIL_SERVICE` / `MAIL_HOST` / `MAIL_PORT` / `MAIL_USER` / `MAIL_PASS` | Outgoing email settings (console logging is used if none provided). |
 | `APP_NAME`, `APP_TAGLINE`, `ORG_DISPLAY_NAME`, `BRAND_*`, `SUPPORT_CONTACT_*` | Branding and support info surfaced in headers, emails, and help pages. |
 | `MANAGE_TOKEN_TTL_DAYS` | How long emailed manage links remain valid (default 30). |
-| `APP_TIMEZONE` | IANA time zone that event times are entered in, used for calendar files and Google Calendar links (default `America/Vancouver`). |
+| `APP_TIMEZONE` | IANA time zone that event times are entered in, used for calendar files and Google Calendar links (default `America/Vancouver`). B.C.'s switch to year-round UTC−7 from November 2026 is applied even on Node versions whose built-in time-zone data predates it. |
 
 See `.env.example` for more options.
 
