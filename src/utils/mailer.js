@@ -2,10 +2,16 @@
 // without worrying about transport setup. If no SMTP settings are provided,
 // messages are written to stdout (stream transport) so local development
 // never fails on missing credentials.
+const fs = require('fs');
 const nodemailer = require('nodemailer');
 const { getBranding } = require('../config/branding');
 
 let cachedTransporter = null;
+
+// Automated tests must never reach a real mailbox, even if a .env with SMTP
+// settings is present. MAIL_OUTBOX (test only) collects messages as JSON lines.
+const IS_TEST = process.env.NODE_ENV === 'test';
+const OUTBOX = IS_TEST ? (process.env.MAIL_OUTBOX || '') : '';
 
 const branding = getBranding();
 const DEFAULT_FROM = process.env.MAIL_FROM || `${branding.orgName} Volunteers <no-reply@example.org>`;
@@ -37,7 +43,7 @@ function createTransporter() {
     baseConfig.auth = { user: MAIL_USER, pass: MAIL_PASS };
   }
 
-  if (Object.keys(baseConfig).length > 0) {
+  if (!IS_TEST && Object.keys(baseConfig).length > 0) {
     cachedTransporter = nodemailer.createTransport(baseConfig);
     cachedTransporter.__defaultFrom = DEFAULT_FROM;
     cachedTransporter.__defaultReplyTo = DEFAULT_REPLY_TO;
@@ -75,7 +81,15 @@ async function sendMail({ to, subject, text, html, from, replyTo, headers, attac
 
   const info = await transporter.sendMail(message);
 
-  if (info && info.message && transporter.options.streamTransport) {
+  if (OUTBOX) {
+    fs.appendFileSync(OUTBOX, `${JSON.stringify({
+      to,
+      subject,
+      text,
+      html,
+      attachments: (message.attachments || []).map(a => ({ filename: a.filename, contentType: a.contentType }))
+    })}\n`);
+  } else if (!IS_TEST && info && info.message && transporter.options.streamTransport) {
     console.log('Email (stream transport):\n', info.message.toString());
   }
 

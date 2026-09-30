@@ -67,7 +67,17 @@ See `.env.example` for more options.
 
 ## Testing
 
-There is currently no `npm test` script or test runner in `package.json`. The public sign-up UI lives in `src/public/js/signup.js` (shared by the event page and the manage page); check it end-to-end in a browser against a copy of the database (set `DB_PATH` / `SESSION_DB_PATH` and leave mail settings blank so emails are logged instead of sent).
+```bash
+npx playwright install chromium   # first time only
+npm test                          # unit tests, then browser tests (under 30 seconds)
+npm run test:unit                 # just the quick Node tests in test/unit/
+npm run test:e2e                  # just the browser tests in test/e2e/
+```
+
+- The browser tests start their own copy of the app on port 3199 (`TEST_PORT` to change it) with a fresh, seeded database in a temp folder, and stop it when they finish. They never touch `db/` or your `.env` data.
+- With `NODE_ENV=test` the mailer never sends real email, even if SMTP settings are present; the browser tests read "sent" messages from an outbox file instead.
+- Covered: events list counts, sign-up for a spot and for Food Prep, signing up family or only someone else, overlapping times blocked or allowed, the same email from another device, the remembered device and "Not you?", manage add/remove/clear, calendar download, and phone layout.
+- A failing test leaves a screenshot and trace in `test-results/` (`npx playwright show-trace <file>`). Set `KEEP_TEST_DATA=1` to keep the temp database for a look afterwards.
 
 ## Contributing on GitHub
 

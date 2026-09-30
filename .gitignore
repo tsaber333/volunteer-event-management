@@ -24,6 +24,7 @@ Thumbs.db
 /db/*.sqlite-journal
 /db/*.db-shm
 /db/*.db-wal
+/src/db/*.db
 
 # Ignore SQLite temp files
 *.db-shm
@@ -38,6 +39,10 @@ logs
 # Build artifacts
 coverage/
 dist/
+
+# Playwright
+test-results/
+playwright-report/
 
 # Temporary
 *.tmp

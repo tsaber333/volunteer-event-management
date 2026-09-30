@@ -36,7 +36,7 @@ async function runScenario() {
   global.window = window;
   global.document = window.document;
 
-  const clientScript = path.join(__dirname, '..', 'src', 'public', 'js', 'admin-event-detail.js');
+  const clientScript = path.join(__dirname, '..', '..', 'src', 'public', 'js', 'admin-event-detail.js');
   loadScript(dom, clientScript);
 
   await new Promise(r => setTimeout(r, 50));
