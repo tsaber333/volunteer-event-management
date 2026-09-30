@@ -4303,11 +4303,18 @@ textarea {
 .slot__picked { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; font-weight: 700; color: var(--success); }
 .slot__picked[hidden] { display: none; }
 .slot__action .badge { background: rgba(15, 23, 42, 0.07); color: var(--text-muted); border-color: rgba(15, 23, 42, 0.14); }
+.slot__new-person { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.4rem; max-width: 22rem; }
+.slot__new-person input { flex: 1 1 11rem; min-width: 0; padding: 0.45rem 0.6rem; border: 1px solid var(--border, #cbd5e1); border-radius: 8px; font: inherit; }
+.slot__action .slot__new-person .btn { min-width: 0; }
+.slot__new-person-error { flex-basis: 100%; margin: 0; font-size: 0.85rem; color: #b91c1c; text-align: right; }
+.slot__new-person-error[hidden] { display: none; }
 
 @media (max-width: 640px) {
   .slot { flex-direction: column; align-items: stretch; }
   .slot__action { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; }
   .slot__action .btn { flex: 1 1 auto; }
+  .slot__new-person { max-width: none; flex: 1 1 100%; justify-content: stretch; }
+  .slot__new-person-error { text-align: left; }
   .positions__toolbar { align-items: stretch; }
 }
 

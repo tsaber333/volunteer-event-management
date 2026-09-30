@@ -71,6 +71,7 @@
   const picks = [];
   const savedCountByBlock = new Map();
   let savedSignature = '';
+  const inlineOpen = new Set();
 
   function personByKey(key) { return people.find(p => p.key === key) || null; }
   function registrantName() { return nameInput ? String(nameInput.value || '').trim() : ''; }
@@ -397,7 +398,7 @@
       const addBtn = el.querySelector('[data-role="add"]');
       if (addBtn) {
         const everyoneBusy = !full && !firstAvailablePerson(slot.id);
-        addBtn.hidden = full;
+        addBtn.hidden = full || inlineOpen.has(slot.id);
         addBtn.textContent = everyoneBusy ? '+ Someone else' : (here.length ? '+ Add another person' : 'Sign up');
         addBtn.classList.toggle('btn-primary', !here.length && !everyoneBusy);
         addBtn.classList.toggle('btn-outline', !!here.length || everyoneBusy);
@@ -612,25 +613,83 @@
       refresh();
       return;
     }
+    if (!firstAvailablePerson(blockId)) {
+      openInlineName(slot);
+      return;
+    }
     const pick = addPick(blockId);
     if (!pick) return;
     refresh();
-    if (!pick.personKey) {
-      const row = picksList.querySelector(`.pick[data-uid="${pick.uid}"]`);
-      const who = row && row.querySelector('.pick__who');
-      const select = who && who.querySelector('select');
-      if (select) {
-        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        showNewPersonInput(who, select, pick);
-        toast(`Added ${slot.label}. Type the name of who’s filling it.`);
-        return;
-      }
-    }
     const person = personByKey(pick.personKey);
     toast(person
       ? `Added ${slot.label} for ${personLabel(person)}.`
       : `Added ${slot.label}. Choose who’s filling it below.`);
   });
+
+  // Everyone in the group is busy for this spot: ask for a new name right in
+  // the card so the page doesn't jump away from the list.
+  function openInlineName(slot) {
+    const action = slot.el.querySelector('.slot__action');
+    if (!action) return;
+    const existing = action.querySelector('.slot__new-person input');
+    if (existing) { existing.focus({ preventScroll: true }); return; }
+
+    inlineOpen.add(slot.id);
+    const wrap = document.createElement('div');
+    wrap.className = 'slot__new-person';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.maxLength = 100;
+    input.placeholder = 'Their full name';
+    input.setAttribute('aria-label', `Name of the person filling ${slot.label}`);
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'btn btn-primary small';
+    add.textContent = 'Add';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'btn btn-link small';
+    cancel.textContent = 'Cancel';
+    const err = document.createElement('p');
+    err.className = 'slot__new-person-error';
+    err.hidden = true;
+
+    const close = () => {
+      inlineOpen.delete(slot.id);
+      wrap.remove();
+      refresh();
+    };
+    const commit = () => {
+      const name = input.value.trim();
+      if (!name) { input.focus({ preventScroll: true }); return; }
+      const person = addPerson(name);
+      const conflict = person ? conflictFor(person.key, slot.id, null) : null;
+      if (!person || conflict) {
+        err.textContent = person ? conflictSentence(person, conflict) : 'Please type a name.';
+        err.hidden = false;
+        input.focus({ preventScroll: true });
+        return;
+      }
+      const pick = addPick(slot.id, person.key);
+      close();
+      if (pick) toast(`Added ${slot.label} for ${personLabel(person)}.`);
+    };
+    add.addEventListener('click', commit);
+    cancel.addEventListener('click', close);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      if (e.key === 'Escape') { e.preventDefault(); close(); }
+    });
+    input.addEventListener('input', () => { err.hidden = true; });
+
+    wrap.appendChild(input);
+    wrap.appendChild(add);
+    wrap.appendChild(cancel);
+    wrap.appendChild(err);
+    action.insertBefore(wrap, action.firstChild);
+    refresh();
+    input.focus({ preventScroll: true });
+  }
 
   // ---- Validation & submit ----------------------------------------------
   function showError(message, focusEl) {
