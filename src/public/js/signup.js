@@ -330,7 +330,7 @@
     wrap.appendChild(add);
     wrap.appendChild(cancel);
     container.appendChild(wrap);
-    input.focus();
+    input.focus({ preventScroll: true });
   }
 
   function pickProblem(pick) {
@@ -396,10 +396,11 @@
 
       const addBtn = el.querySelector('[data-role="add"]');
       if (addBtn) {
+        const everyoneBusy = !full && !firstAvailablePerson(slot.id);
         addBtn.hidden = full;
-        addBtn.textContent = here.length ? '+ Add another person' : 'Sign up';
-        addBtn.classList.toggle('btn-primary', !here.length);
-        addBtn.classList.toggle('btn-outline', !!here.length);
+        addBtn.textContent = everyoneBusy ? '+ Someone else' : (here.length ? '+ Add another person' : 'Sign up');
+        addBtn.classList.toggle('btn-primary', !here.length && !everyoneBusy);
+        addBtn.classList.toggle('btn-outline', !!here.length || everyoneBusy);
       }
       let badge = el.querySelector('[data-role="full-badge"]');
       if (full && !badge) {
@@ -614,6 +615,17 @@
     const pick = addPick(blockId);
     if (!pick) return;
     refresh();
+    if (!pick.personKey) {
+      const row = picksList.querySelector(`.pick[data-uid="${pick.uid}"]`);
+      const who = row && row.querySelector('.pick__who');
+      const select = who && who.querySelector('select');
+      if (select) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        showNewPersonInput(who, select, pick);
+        toast(`Added ${slot.label}. Type the name of who’s filling it.`);
+        return;
+      }
+    }
     const person = personByKey(pick.personKey);
     toast(person
       ? `Added ${slot.label} for ${personLabel(person)}.`
