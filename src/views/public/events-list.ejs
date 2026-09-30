@@ -92,7 +92,7 @@
           <% } else if (openSpots === 0) { %>
             <p class="event-card__needs-text event-card__needs-text--done">Every <%= spotWord %> is filled — thank you!</p>
           <% } else { %>
-            <p class="event-card__needs-text"><%= openSpots %> of <%= totalSpots %> <%= spotWord %>s still needed</p>
+            <p class="event-card__needs-text"><%= openSpots %> <%= openSpots === 1 ? spotWord : spotWord + 's' %> still needed</p>
           <% } %>
           <% if (totalSpots > 0) { %>
             <span class="spots-bar" aria-hidden="true"><span class="spots-bar__fill" style="width: <%= Math.round(((totalSpots - openSpots) / totalSpots) * 100) %>%"></span></span>

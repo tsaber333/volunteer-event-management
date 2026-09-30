@@ -376,7 +376,7 @@
       if (spotsText) {
         spotsText.textContent = full
           ? (here.length ? 'Full (including your picks)' : 'Full — thank you!')
-          : `${left} of ${slot.capacity} ${isPotluck ? 'still needed' : (slot.capacity === 1 ? 'spot open' : 'spots open')}`;
+          : `${left} ${isPotluck ? 'still needed' : (left === 1 ? 'spot left' : 'spots left')}`;
       }
       const fill = el.querySelector('.spots-bar__fill');
       if (fill && slot.capacity > 0) {
