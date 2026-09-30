@@ -115,6 +115,9 @@ const manageViewLabel = isDraft ? 'Preview public page' : (isPrivate ? 'Open pri
       <div class="rich-text muted"><%- helpers.renderRichText(event.description) %></div>
     <% } %>
     <p class="page-subtitle"><%= fmt12(event.date_start) %> – <%= fmt12(event.date_end) %></p>
+    <% if (!isPotluck && event.allow_overlap) { %>
+      <p class="muted small">Overlapping time slots are allowed for the same person (change in Edit event).</p>
+    <% } %>
     <% if (slotTotals.capacity > 0) { %>
       <div class="event-slot-summary" role="status" aria-live="polite">
         <span class="event-slot-summary__metric">
@@ -868,6 +871,14 @@ const manageViewLabel = isDraft ? 'Preview public page' : (isPrivate ? 'Open pri
         <option value="schedule" <%= (String(event.signup_mode||'')==='schedule') ? 'selected' : '' %>>Volunteer schedule (stations &amp; time slots)</option>
         <option value="potluck" <%= (String(event.signup_mode||'')==='potluck') ? 'selected' : '' %>>Food Prep (categories &amp; items, no times)</option>
       </select>
+    </div>
+    <div class="form-group">
+      <input type="hidden" name="allow_overlap" value="0">
+      <label>
+        <input type="checkbox" id="edit-event-allow-overlap" name="allow_overlap" value="1" <%= event.allow_overlap ? 'checked' : '' %>>
+        Let one person sign up for time slots that overlap
+      </label>
+      <p class="muted small">Off by default. Only applies to volunteer schedule events. Nobody can take the exact same slot twice either way.</p>
     </div>
   </form>
 <%- include('../partials/modal-end', { id: 'editEventModal', formId: 'editEventForm' }) %>

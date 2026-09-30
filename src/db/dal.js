@@ -22,6 +22,10 @@ try {
 try {
   db.prepare(`ALTER TABLE events ADD COLUMN signup_mode TEXT NOT NULL DEFAULT 'schedule'`).run();
 } catch (_) { /* already exists */ }
+// When 1, one participant may hold time slots that overlap (schedule events only).
+try {
+  db.prepare(`ALTER TABLE events ADD COLUMN allow_overlap INTEGER NOT NULL DEFAULT 0`).run();
+} catch (_) { /* already exists */ }
 // Ensure station order column exists so admins can persist manual ordering
 try {
   db.prepare(`ALTER TABLE stations ADD COLUMN station_order INTEGER NOT NULL DEFAULT 0`).run();
@@ -305,6 +309,7 @@ const admin = {
       SELECT
         e.event_id, e.name, e.description, e.date_start, e.date_end,
         COALESCE(e.signup_mode, 'schedule') AS signup_mode,
+        COALESCE(e.allow_overlap, 0) AS allow_overlap,
         COALESCE(e.is_published, 0) AS is_published,
         COALESCE(e.publish_state, CASE WHEN COALESCE(e.is_published,0)=1 THEN 'published' ELSE 'draft' END) AS publish_state,
         s.station_id,
@@ -657,6 +662,7 @@ const admin = {
     if (patch.date_start !== undefined) { fields.push(`date_start = ?`); values.push(patch.date_start); }
     if (patch.date_end !== undefined) { fields.push(`date_end = ?`); values.push(patch.date_end); }
     if (patch.signup_mode !== undefined) { fields.push(`signup_mode = ?`); values.push(patch.signup_mode); }
+    if (patch.allow_overlap !== undefined) { fields.push(`allow_overlap = ?`); values.push(patch.allow_overlap ? 1 : 0); }
     if (fields.length === 0) return { changes: 0, lastInsertRowid: 0 };
     values.push(eventId);
     try {
@@ -830,7 +836,8 @@ const publicDal = {
         s.event_id,
         s.station_id,
         s.name AS station_name,
-        COALESCE(e.signup_mode, 'schedule') AS signup_mode
+        COALESCE(e.signup_mode, 'schedule') AS signup_mode,
+        COALESCE(e.allow_overlap, 0) AS allow_overlap
       FROM time_blocks tb
       JOIN stations s ON s.station_id = tb.station_id
       JOIN events e ON e.event_id = s.event_id
@@ -854,14 +861,34 @@ const publicDal = {
     `).all(bid);
   },
   // Only published events are listed publicly
+  // Includes spot totals so the list can show how much help is still needed.
   listUpcomingEvents: () => {
     return db.prepare(`
-      SELECT event_id, name, description, date_start, date_end,
-             COALESCE(signup_mode, 'schedule') AS signup_mode
-      FROM events
-      WHERE COALESCE(publish_state, CASE WHEN COALESCE(is_published,0)=1 THEN 'published' ELSE 'draft' END) = 'published'
-        AND datetime(date_end) >= datetime('now')
-      ORDER BY datetime(date_start) ASC
+      SELECT e.event_id, e.name, e.description, e.date_start, e.date_end,
+             COALESCE(e.signup_mode, 'schedule') AS signup_mode,
+             COALESCE(spots.total_spots, 0) AS total_spots,
+             COALESCE(spots.filled_spots, 0) AS filled_spots
+      FROM events e
+      LEFT JOIN (
+        SELECT s.event_id,
+               SUM(COALESCE(tb.capacity_needed, 0)) AS total_spots,
+               SUM(MIN(COALESCE(tb.capacity_needed, 0), COALESCE(
+                 CASE WHEN COALESCE(ev.signup_mode, 'schedule') = 'potluck' THEN rpot.cnt ELSE rsched.cnt END, 0
+               ))) AS filled_spots
+        FROM time_blocks tb
+        JOIN stations s ON s.station_id = tb.station_id
+        JOIN events ev ON ev.event_id = s.event_id
+        LEFT JOIN (
+          SELECT time_block_id AS block_id, COUNT(*) AS cnt FROM schedule_assignments GROUP BY time_block_id
+        ) rsched ON rsched.block_id = tb.block_id
+        LEFT JOIN (
+          SELECT item_id AS block_id, COUNT(*) AS cnt FROM potluck_assignments GROUP BY item_id
+        ) rpot ON rpot.block_id = tb.block_id
+        GROUP BY s.event_id
+      ) spots ON spots.event_id = e.event_id
+      WHERE COALESCE(e.publish_state, CASE WHEN COALESCE(e.is_published,0)=1 THEN 'published' ELSE 'draft' END) = 'published'
+        AND datetime(e.date_end) >= datetime('now')
+      ORDER BY datetime(e.date_start) ASC
     `).all();
   },
 
@@ -870,7 +897,8 @@ const publicDal = {
     return db.prepare(`
       SELECT event_id, name, description, date_start, date_end,
              COALESCE(is_published, 0) AS is_published,
-             COALESCE(signup_mode, 'schedule') AS signup_mode
+             COALESCE(signup_mode, 'schedule') AS signup_mode,
+             COALESCE(allow_overlap, 0) AS allow_overlap
       FROM events
       WHERE event_id = ?
     `).get(eventId);
@@ -882,6 +910,7 @@ const publicDal = {
       SELECT
         e.event_id, e.name, e.description, e.date_start, e.date_end,
         COALESCE(e.signup_mode, 'schedule') AS signup_mode,
+        COALESCE(e.allow_overlap, 0) AS allow_overlap,
         s.station_id,
         s.name AS station_name,
         s.description AS station_description,

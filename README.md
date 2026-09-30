@@ -26,9 +26,13 @@ Express + SQLite tooling for church and community volunteer sign-ups. Volunteers
 Run `npm run init-db` anytime to (re)create the SQLite schema in `db/volunteer.db`.
 
 ### Volunteer flow (what they see)
-- Step 1: Enter contact info and add participant names.
-- Step 2: Pick slots (schedule) or items with dish names (food prep).
-- Step 3: Quick review, then submit. A manage link is emailed for edits.
+- The events list shows how many spots/items each event still needs.
+- Step 1: Browse open slots (schedule) or items (food prep) and press “Sign up” on each one. Filters: view by station or time, show only open.
+- Step 2: Enter contact info and choose who fills each spot (the registrant or “Someone else…”); food prep also asks for dish names.
+- Confirm. The success page lists what was reserved and a manage link is emailed.
+- The same person can’t take one slot twice or two overlapping slots, unless an admin turns on “Let one person sign up for time slots that overlap” in Edit event (`events.allow_overlap`, off by default). Rules are enforced on the server for sign-up, manage, and admin moves.
+- Returning on the same device: a `signup_<eventId>` cookie (httpOnly, lasts `MANAGE_TOKEN_TTL_DAYS`) shows “You’re signed up…” at the top of the event page, with a “Not you?” button that forgets it.
+- Signing up again with an email that already has a sign-up emails the manage link and holds the new picks in the session; opening the link in the same browser pre-loads them on the manage page.
 
 ### Admin notes
 - Google OAuth is required; without credentials the login flow will fail.
@@ -61,7 +65,7 @@ See `.env.example` for more options.
 
 ## Testing
 
-`npm test` runs JS-DOM unit tests plus a lightweight Puppeteer smoke of the datetime picker. Install Chromium locally if Puppeteer prompts for a download.
+There is currently no `npm test` script or test runner in `package.json`. The public sign-up UI lives in `src/public/js/signup.js` (shared by the event page and the manage page); check it end-to-end in a browser against a copy of the database (set `DB_PATH` / `SESSION_DB_PATH` and leave mail settings blank so emails are logged instead of sent).
 
 ## Contributing on GitHub
 

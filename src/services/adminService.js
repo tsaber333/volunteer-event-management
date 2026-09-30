@@ -151,6 +151,7 @@ function getEventDetailsForAdmin(eventId) {
     is_private: isPrivate,
     publish_state: publishState,
     signup_mode: rows[0].signup_mode || 'schedule',
+    allow_overlap: Number(rows[0].allow_overlap || 0) === 1,
     stations: []
   };
 
@@ -423,6 +424,11 @@ function updateEvent(eventId, data) {
     const mode = String(data.signup_mode || data.mode || '').trim().toLowerCase();
     if (mode === 'potluck' || mode === 'schedule') patch.signup_mode = mode;
   }
+  if (data.allow_overlap !== undefined) {
+    // Checkbox + hidden fallback posts ['0', '1'] when checked; the last value wins.
+    const raw = Array.isArray(data.allow_overlap) ? data.allow_overlap[data.allow_overlap.length - 1] : data.allow_overlap;
+    patch.allow_overlap = ['1', 'true', 'on', 'yes'].includes(String(raw).trim().toLowerCase());
+  }
   if (patch.date_start && patch.date_end && cmpLocal(patch.date_start, patch.date_end) >= 0) {
     throw createError(400, 'Event end must be after start.');
   }
@@ -633,7 +639,12 @@ function getBlockRanges(blockIds) {
   info.forEach(b => {
     const start = new Date(String(b.start_time).replace(' ', 'T')).getTime();
     const end = new Date(String(b.end_time).replace(' ', 'T')).getTime();
-    map.set(Number(b.block_id), { start, end, signup_mode: String(b.signup_mode || '').toLowerCase() });
+    map.set(Number(b.block_id), {
+      start,
+      end,
+      signup_mode: String(b.signup_mode || '').toLowerCase(),
+      allow_overlap: Number(b.allow_overlap || 0) === 1
+    });
   });
   return map;
 }
@@ -651,8 +662,9 @@ function assertNoOverlapForParticipant(participantId, newBlockId, detail) {
   const blockMap = getBlockRanges(blockIds);
   const newRange = blockMap.get(Number(newBlockId));
   if (!newRange) return;
-  // Only enforce for schedule events
+  // Only enforce for schedule events that have not opted into overlapping slots
   if ((newRange.signup_mode || 'schedule') !== 'schedule') return;
+  if (newRange.allow_overlap) return;
 
   for (const a of existingForParticipant) {
     const range = blockMap.get(Number(a.time_block_id));
@@ -963,6 +975,7 @@ module.exports = {
     // Create new event (is_published defaults to 0 in DAL)
     const evRes = dal.admin.createEvent(name, src.description || '', startTxt, endTxt);
     const newEventId = evRes.lastInsertRowid;
+    if (src.allow_overlap) dal.admin.updateEvent(newEventId, { allow_overlap: true });
 
     // Copy stations and blocks in current order; no reservations
     (Array.isArray(src.stations) ? src.stations : []).forEach(st => {

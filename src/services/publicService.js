@@ -8,7 +8,7 @@
 const crypto = require('crypto');
 const createError = require('http-errors');
 const dal = require('../db/dal');
-const { fmt12 } = require('../views/helpers');
+const { fmt12, fmtRange: fmtSlotRange } = require('../views/helpers');
 const { sendMail } = require('../utils/mailer');
 const { getBranding } = require('../config/branding');
 
@@ -25,6 +25,7 @@ function mapEventRows(rows) {
     date_start: rows[0].date_start,
     date_end: rows[0].date_end,
     signup_mode: rows[0].signup_mode || 'schedule',
+    allow_overlap: Number(rows[0].allow_overlap || 0) === 1,
     stations: []
   };
 
@@ -607,6 +608,42 @@ function buildTimeMap(blocks) {
   return map;
 }
 
+/**
+ * Enforce the per-person rules for a set of assignments:
+ * - nobody holds the same slot/item twice
+ * - nobody holds overlapping time slots, unless the event allows it
+ * `assignments` items are { personKey, blockId }; `nameForKey` labels errors.
+ */
+function assertAssignmentRules(assignments, { blockInfo, isPotluck, allowOverlap, nameForKey }) {
+  const label = (key) => (nameForKey && nameForKey(key)) || 'A participant';
+  const seen = new Set();
+  assignments.forEach(a => {
+    const k = `${a.personKey}|${a.blockId}`;
+    if (seen.has(k)) {
+      throw createError(400, `${label(a.personKey)} is already signed up for that ${isPotluck ? 'item' : 'time slot'}.`);
+    }
+    seen.add(k);
+  });
+  if (isPotluck || allowOverlap) return;
+
+  const timeMap = buildTimeMap(blockInfo || []);
+  const byPerson = new Map();
+  assignments.forEach(a => {
+    const list = byPerson.get(a.personKey) || [];
+    list.push({ blockId: a.blockId, ...(timeMap.get(Number(a.blockId)) || { start: Number.NaN, end: Number.NaN }) });
+    byPerson.set(a.personKey, list);
+  });
+  byPerson.forEach((list, key) => {
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        if (slotsOverlap(list[i], list[j])) {
+          throw createError(400, `${label(key)} can't take two time slots that happen at the same time.`);
+        }
+      }
+    }
+  });
+}
+
 async function processVolunteerSignup(payload) {
   const eventId = Number(payload.eventId);
   if (!Number.isFinite(eventId)) throw createError(400, 'Event is required.');
@@ -676,7 +713,7 @@ async function processVolunteerSignup(payload) {
       const participantName = normalizeName(item.participantName || item.participant);
       idx = participantIndexByName.get(participantName.toLowerCase());
     }
-    if (!Number.isFinite(blockId) || idx == null) throw createError(400, 'Each time block must have a participant.');
+    if (!Number.isFinite(blockId) || idx == null || !participantNames[idx]) throw createError(400, 'Each time block must have a participant.');
     return { blockId, participantIndex: idx };
   });
   const normalizedPot = isPotluck ? potluckAssignmentsRaw.map(item => {
@@ -689,7 +726,7 @@ async function processVolunteerSignup(payload) {
       idx = participantIndexByName.get(participantName.toLowerCase());
     }
     const dish = normalizeDish(item.dishName || item.dish);
-    if (!Number.isFinite(blockId) || idx == null) throw createError(400, 'Each item must have a participant selected.');
+    if (!Number.isFinite(blockId) || idx == null || !participantNames[idx]) throw createError(400, 'Each item must have a participant selected.');
     if (!dish) throw createError(400, 'Please enter a dish name for each item.');
     return { itemId: blockId, participantIndex: idx, dishName: dish };
   }) : [];
@@ -709,26 +746,12 @@ async function processVolunteerSignup(payload) {
     }
   });
 
-  if (!isPotluck) {
-    const timeMap = buildTimeMap(blockInfo);
-    const byParticipant = new Map();
-    normalizedSched.forEach(assign => {
-      const idx = assign.participantIndex;
-      const list = byParticipant.get(idx) || [];
-      const meta = timeMap.get(assign.blockId) || { start: Number.NaN, end: Number.NaN };
-      list.push({ blockId: assign.blockId, ...meta });
-      byParticipant.set(idx, list);
-    });
-    byParticipant.forEach(list => {
-      for (let i = 0; i < list.length; i++) {
-        for (let j = i + 1; j < list.length; j++) {
-          if (slotsOverlap(list[i], list[j])) {
-            throw createError(400, 'Assignments for a participant cannot overlap.');
-          }
-        }
-      }
-    });
-  }
+  const allowOverlap = Number(event.allow_overlap || 0) === 1;
+  assertAssignmentRules(
+    (isPotluck ? normalizedPot.map(p => ({ personKey: p.participantIndex, blockId: p.itemId }))
+      : normalizedSched.map(s => ({ personKey: s.participantIndex, blockId: s.blockId }))),
+    { blockInfo, isPotluck, allowOverlap, nameForKey: (idx) => participantNames[idx] }
+  );
 
   // If this email already has registrations for this event, merge into the
   // existing record so we don't create duplicate manage links.
@@ -847,6 +870,7 @@ async function processVolunteerSignup(payload) {
     eventId,
     token,
     manageUrl,
+    participants,
     alreadyRegistered: false
   };
 }
@@ -877,6 +901,59 @@ function getManageContext(token) {
   };
 }
 
+/**
+ * Summarise an existing registration against the event's slots so pages can
+ * show "what you already have" before someone signs up for more.
+ * Returns { total, people: [{ id, name, items: [{ blockId, label, dishName }] }],
+ *           byBlock: { blockId: [names] }, conflicts: { blockId: [messages] } }.
+ */
+function buildSignupSummary(event, participants) {
+  const isPotluck = String(event && event.signup_mode || '').toLowerCase() === 'potluck';
+  const people = [];
+  const byBlock = {};
+  const conflicts = {};
+  let total = 0;
+
+  const labelFor = (a) => (isPotluck
+    ? `${a.station_name || 'Item'} — ${a.title || 'Item'}`
+    : `${a.station_name || 'Station'} — ${fmtSlotRange(a.start_time, a.end_time)}`);
+
+  (participants || []).forEach(p => {
+    const list = isPotluck ? (p.potluck || []) : (p.schedule || []);
+    const items = list.map(a => {
+      const blockId = Number(isPotluck ? a.item_id : a.time_block_id);
+      (byBlock[blockId] = byBlock[blockId] || []).push(p.participant_name);
+      return { blockId, label: labelFor(a), dishName: a.dish_name || '' };
+    });
+    total += items.length;
+    people.push({ id: p.participant_id, name: p.participant_name, items });
+  });
+
+  if (!isPotluck && !(event && event.allow_overlap)) {
+    const range = (s, e) => {
+      const a = parseLocalDate(s);
+      const b = parseLocalDate(e);
+      return { start: a ? a.getTime() : Number.NaN, end: b ? b.getTime() : Number.NaN };
+    };
+    (event.stations || []).forEach(st => {
+      (st.time_blocks || []).forEach(tb => {
+        const blockRange = range(tb.start_time, tb.end_time);
+        (participants || []).forEach(p => {
+          (p.schedule || []).forEach(a => {
+            if (Number(a.time_block_id) === Number(tb.block_id)) return;
+            if (slotsOverlap(blockRange, range(a.start_time, a.end_time))) {
+              (conflicts[tb.block_id] = conflicts[tb.block_id] || [])
+                .push(`${p.participant_name} is at ${a.station_name || 'another station'} then`);
+            }
+          });
+        });
+      });
+    });
+  }
+
+  return { total, people, byBlock, conflicts };
+}
+
 async function updateVolunteerSignup(token, scheduleAssignments, potluckAssignments, options = {}) {
   const context = getManageContext(token);
   if (!context) throw createError(410, 'This link has expired or is no longer valid.');
@@ -898,44 +975,50 @@ async function updateVolunteerSignup(token, scheduleAssignments, potluckAssignme
   }
 
   const participantRows = dal.public.getRegistrationDetailWithAssignments(registration.registration_id).participants || [];
-  const participantSet = new Set(participantRows.map(p => Number(p.participant_id)));
+  const participantById = new Map(participantRows.map(p => [Number(p.participant_id), p]));
+  const participantByName = new Map(participantRows.map(p => [String(p.participant_name).trim().toLowerCase(), p]));
+  // People added from the manage page arrive by name; they are created only after validation passes.
+  const newPeople = new Map();
+
+  function resolvePersonKey(a) {
+    const rawId = a.participantId != null ? a.participantId : a.participant_id;
+    if (rawId != null && rawId !== '') {
+      const pid = Number(rawId);
+      if (!participantById.has(pid)) throw createError(400, 'Invalid participant selection.');
+      return `id:${pid}`;
+    }
+    const name = normalizeName(a.participantName || a.participant_name);
+    if (!name) throw createError(400, 'Choose who is filling each spot.');
+    if (name.length > 100) throw createError(400, 'Names must be 100 characters or fewer.');
+    const lower = name.toLowerCase();
+    const existing = participantByName.get(lower);
+    if (existing) return `id:${existing.participant_id}`;
+    if (!newPeople.has(lower)) newPeople.set(lower, name);
+    return `new:${lower}`;
+  }
+  function nameForKey(key) {
+    if (key.startsWith('id:')) {
+      const p = participantById.get(Number(key.slice(3)));
+      return p ? p.participant_name : '';
+    }
+    return newPeople.get(key.slice(4)) || '';
+  }
 
   const normalizedSched = isPotluck ? [] : assignmentsSched.map(a => {
     const blockId = Number(a.blockId || a.time_block_id || a);
-    const participantId = Number(a.participantId || a.participant_id);
-    if (!participantSet.has(participantId)) throw createError(400, 'Invalid participant selection.');
-    return { blockId, participantId };
+    return { blockId, personKey: resolvePersonKey(a) };
   });
   const normalizedPot = isPotluck ? assignmentsPot.map(a => {
     const blockId = Number(a.itemId || a.block_id || a);
-    const participantId = Number(a.participantId || a.participant_id);
+    const personKey = resolvePersonKey(a);
     const dish = normalizeDish(a.dishName || a.dish);
-    if (!participantSet.has(participantId)) throw createError(400, 'Invalid participant selection.');
     if (!dish) throw createError(400, 'Please enter a dish name for each item.');
-    return { itemId: blockId, participantId, dishName: dish };
+    return { itemId: blockId, personKey, dishName: dish };
   }) : [];
 
-  // De-dup assignments (participant, block) to avoid double-counting during capacity checks
-  const schedSeen = new Set();
-  const dedupSched = [];
-  normalizedSched.forEach(a => {
-    const key = `${a.participantId}:${a.blockId}`;
-    if (schedSeen.has(key)) return;
-    schedSeen.add(key);
-    dedupSched.push(a);
-  });
-  const potSeen = new Set();
-  const dedupPot = [];
-  normalizedPot.forEach(a => {
-    const key = `${a.participantId}:${a.itemId}:${a.dishName}`;
-    if (potSeen.has(key)) return;
-    potSeen.add(key);
-    dedupPot.push(a);
-  });
-
   const blockIds = isPotluck
-    ? dedupPot.map(p => p.itemId)
-    : dedupSched.map(s => s.blockId);
+    ? normalizedPot.map(p => p.itemId)
+    : normalizedSched.map(s => s.blockId);
   const blockInfo = blockIds.length ? dal.public.getBlocksInfo(blockIds) : [];
   if (blockIds.length && !blockInfo.length) throw createError(400, 'No valid selections were submitted.');
   if (blockInfo.length) {
@@ -946,37 +1029,45 @@ async function updateVolunteerSignup(token, scheduleAssignments, potluckAssignme
     });
   }
 
-  if (!isPotluck && blockInfo.length) {
-    const timeMap = buildTimeMap(blockInfo);
-    const byParticipant = new Map();
-    normalizedSched.forEach(assign => {
-      const pid = assign.participantId;
-      const list = byParticipant.get(pid) || [];
-      const meta = timeMap.get(assign.blockId) || { start: Number.NaN, end: Number.NaN };
-      list.push({ blockId: assign.blockId, ...meta });
-      byParticipant.set(pid, list);
-    });
-    byParticipant.forEach(list => {
-      for (let i = 0; i < list.length; i++) {
-        for (let j = i + 1; j < list.length; j++) {
-          if (slotsOverlap(list[i], list[j])) {
-            throw createError(400, 'Assignments for a participant cannot overlap.');
-          }
-        }
-      }
-    });
-  }
-
-  const replaceResult = dal.public.replaceRegistrationAssignments(
-    registration.registration_id,
-    registration.event_id,
-    dedupSched,
-    dedupPot,
-    { debugCapacity: options.debugCapacity }
+  assertAssignmentRules(
+    isPotluck
+      ? normalizedPot.map(p => ({ personKey: p.personKey, blockId: p.itemId }))
+      : normalizedSched.map(s => ({ personKey: s.personKey, blockId: s.blockId })),
+    { blockInfo, isPotluck, allowOverlap: !!event.allow_overlap, nameForKey }
   );
 
+  const createdIds = [];
+  const idForKey = new Map();
+  try {
+    newPeople.forEach((name, lower) => {
+      const res = dal.public.addParticipant(registration.registration_id, name);
+      createdIds.push(res.participant_id);
+      idForKey.set(`new:${lower}`, res.participant_id);
+    });
+  } catch (err) {
+    createdIds.forEach(pid => { try { dal.public.deleteParticipant(registration.registration_id, pid, true); } catch (_) {} });
+    throw err;
+  }
+  const toParticipantId = (key) => (key.startsWith('id:') ? Number(key.slice(3)) : idForKey.get(key));
+  const finalSched = normalizedSched.map(s => ({ blockId: s.blockId, participantId: toParticipantId(s.personKey) }));
+  const finalPot = normalizedPot.map(p => ({ itemId: p.itemId, participantId: toParticipantId(p.personKey), dishName: p.dishName }));
+
+  let replaceResult;
+  try {
+    replaceResult = dal.public.replaceRegistrationAssignments(
+      registration.registration_id,
+      registration.event_id,
+      finalSched,
+      finalPot,
+      { debugCapacity: options.debugCapacity }
+    );
+  } catch (err) {
+    createdIds.forEach(pid => { try { dal.public.deleteParticipant(registration.registration_id, pid, true); } catch (_) {} });
+    throw err;
+  }
+
   // If everything was cleared, remove the registration to avoid stale manage links.
-  if (!dedupSched.length && !dedupPot.length) {
+  if (!finalSched.length && !finalPot.length) {
     try { dal.public.deleteRegistrationCascade(registration.registration_id); } catch (_) {}
     return {
       registration: null,
@@ -1255,6 +1346,7 @@ module.exports = {
   getEventDetailsForPreview,
   processVolunteerSignup,
   getManageContext,
+  buildSignupSummary,
   updateVolunteerSignup,
   sendManageReminder,
   checkDuplicateRegistration,

@@ -3,19 +3,26 @@
 <% const { fmt12 } = helpers; %>
 <% const isPotluck = String(event.signup_mode || '').toLowerCase() === 'potluck'; %>
 <% const stations = Array.isArray(event.stations) ? event.stations : Object.values(event.stations || {}); %>
-<% const hasTimeBlocks = stations.some(s => Array.isArray(s.time_blocks) && s.time_blocks.length > 0); %>
+<% const hasSlots = stations.some(s => Array.isArray(s.time_blocks) && s.time_blocks.length > 0); %>
 <% const brandInfo = locals.brand || {}; %>
 <% const supportEmail = brandInfo.supportContactEmail || ''; %>
 <% const supportName = brandInfo.supportContactName || brandInfo.orgName || 'our team'; %>
 <% const emailPrefs = (typeof emailPreferences !== 'undefined' && emailPreferences) ? emailPreferences : { optIn: true, volunteerEmail: '' }; %>
 <% const debugCapacity = query && String(query.debug || '').toLowerCase() === 'capacity'; %>
 <% const _s = new Date(event.date_start); const _e = new Date(event.date_end); const _same = _s.getFullYear()===_e.getFullYear() && _s.getMonth()===_e.getMonth() && _s.getDate()===_e.getDate(); %>
-<% const potluckNotes = {}; (participants || []).forEach(function(p){ (p.potluck || []).forEach(function(a){ potluckNotes[a.item_id] = a.dish_name || ''; }); }); %>
+<% const spotWord = isPotluck ? 'item' : 'spot'; %>
+<%
+  const savedAssignments = [];
+  (participants || []).forEach(function (p) {
+    (p.schedule || []).forEach(function (a) { savedAssignments.push({ blockId: Number(a.time_block_id), participantId: p.participant_id, dishName: '' }); });
+    (p.potluck || []).forEach(function (a) { savedAssignments.push({ blockId: Number(a.item_id), participantId: p.participant_id, dishName: a.dish_name || '' }); });
+  });
+%>
 
 <section class="page-header page-shell">
   <div>
     <a href="/events" class="btn-link">&larr; Back to sign-ups</a>
-    <h1>Manage your sign-up for <%= event.name %></h1>
+    <h1>Your sign-up for <%= event.name %></h1>
     <% if (_same) { %>
       <p class="page-subtitle"><%= _s.toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' }) %> — <%= _s.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}) %> to <%= _e.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}) %></p>
     <% } else { %>
@@ -33,247 +40,92 @@
   </div>
 </section>
 
-<section class="page-section page-shell">
-  <article class="card card--plain">
-    <% if (event.description) { %>
-      <div class="rich-text"><%- helpers.renderRichText(event.description) %></div>
-    <% } else { %>
-      <p class="muted"><%= isPotluck ? 'Review your food prep items below.' : 'Review the stations and times below, then update your selections as needed.' %></p>
-    <% } %>
-    <p class="muted">Update or remove your selections using the list below, then choose "Save changes" to send yourself a confirmation email.</p>
-    <p class="muted small">
-      Need instructions? <a href="/help">Open the volunteer help guide</a><% if (supportEmail) { %> or email <%= supportName %> at <a href="mailto:<%= supportEmail %>"><%= supportEmail %></a><% } else { %>. If you are stuck, reply to your confirmation email.<% } %>
-    </p>
-    <p class="muted small">Your confirmation email contains this page’s link if you need it later.</p>
-  </article>
-</section>
-
 <section class="page-shell flash-shell">
   <%- include('../partials/messages') %>
 </section>
 
-<section class="page-section page-shell">
-  <h3 class="step-heading">Step 1: Manage participants</h3>
-<article class="card card--plain signup-panel participant-panel">
-    <div class="participant-layout">
+<section class="page-section page-section--compact page-shell" id="your-signups" aria-labelledby="your-signups-heading">
+  <h3 id="your-signups-heading" class="step-heading">Your sign-ups <span class="selection-count-badge" data-role="picks-count"></span></h3>
+  <article class="card card--plain signup-panel">
+    <p class="muted">Change who is filling a <%= spotWord %>, remove one, or add more from the list below. Nothing changes until you press “Save changes.”</p>
+    <div class="notice notice--info" data-role="pending-note" hidden></div>
+    <form id="manage-form" action="/manage/<%= token %><%= debugCapacity ? '?debug=capacity' : '' %>" method="POST" novalidate data-role="picks-form">
+      <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
+      <input type="hidden" name="registration_payload" data-role="payload" value="">
+      <div class="notice notice--error" data-role="form-error" role="alert" hidden></div>
+      <p class="muted" data-role="picks-empty" hidden>You have no <%= spotWord %>s right now. Add some from the list below — or press “Save changes” to cancel your sign-up.</p>
+      <ul class="pick-list" data-role="picks-list"></ul>
+      <div class="card-actions">
+        <span class="muted small" data-role="dirty-note" hidden>You have unsaved changes.</span>
+        <button type="submit" class="btn btn-primary">Save changes</button>
+      </div>
+    </form>
+  </article>
+
+  <details class="disclosure manage-people">
+    <summary class="disclosure__summary">Edit names in your group</summary>
+    <div class="disclosure__panel participant-panel">
       <div class="participant-list">
         <% (participants || []).forEach(function(p) { %>
           <div class="participant-row">
-            <form action="/manage/<%= token %>" method="POST" class="inline-form">
+            <form action="/manage/<%= token %>" method="POST" class="inline-form" data-guard-dirty>
               <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
               <input type="hidden" name="action" value="rename">
               <input type="hidden" name="participantId" value="<%= p.participant_id %>">
-              <label class="sr-only" for="rename-<%= p.participant_id %>">Rename</label>
+              <label class="sr-only" for="rename-<%= p.participant_id %>">Name</label>
               <input id="rename-<%= p.participant_id %>" name="name" type="text" value="<%= p.participant_name %>">
               <button type="submit" class="btn btn-ghost small">Rename</button>
             </form>
-            <form action="/manage/<%= token %>" method="POST" class="inline-form">
+            <form action="/manage/<%= token %>" method="POST" class="inline-form" data-guard-dirty
+                  data-confirm-delete="<%= p.participant_name %>"
+                  data-assignment-count="<%= (p.schedule || []).length + (p.potluck || []).length %>">
               <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
               <input type="hidden" name="action" value="delete">
               <input type="hidden" name="participantId" value="<%= p.participant_id %>">
-              <button type="button" class="btn btn-link danger small manage-delete-btn" data-participant-id="<%= p.participant_id %>" data-participant-name="<%= p.participant_name %>">Delete</button>
+              <input type="hidden" name="removeAssignments" value="1">
+              <button type="submit" class="btn btn-link danger small">Remove</button>
             </form>
           </div>
         <% }) %>
-        <form action="/manage/<%= token %>" method="POST" class="inline-form participant-add">
-          <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
-          <input type="hidden" name="action" value="add">
-          <label class="sr-only" for="add-participant-name">Add participant</label>
-          <input id="add-participant-name" type="text" name="name" placeholder="New participant name">
-          <button type="submit" class="btn btn-outline small">Add</button>
-        </form>
       </div>
       <% if ((participants || []).length > 1) { %>
-      <div class="participant-merge">
-        <form action="/manage/<%= token %>" method="POST" class="inline-form merge-form">
+        <form action="/manage/<%= token %>" method="POST" class="inline-form merge-form" data-guard-dirty>
           <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
           <input type="hidden" name="action" value="merge">
-          <label class="form-label">Merge participants</label>
+          <label class="form-label">Same person listed twice? Combine them</label>
           <div class="merge-row">
-            <select name="fromId" required>
+            <select name="fromId" required aria-label="Combine this person">
               <% (participants || []).forEach(function(p){ %>
                 <option value="<%= p.participant_id %>"><%= p.participant_name %></option>
               <% }) %>
             </select>
             <span class="muted small">into</span>
-            <select name="toId" required>
+            <select name="toId" required aria-label="Into this person">
               <% (participants || []).forEach(function(p){ %>
                 <option value="<%= p.participant_id %>"><%= p.participant_name %></option>
               <% }) %>
             </select>
-            <button type="submit" class="btn btn-ghost small">Merge</button>
+            <button type="submit" class="btn btn-ghost small">Combine</button>
           </div>
-          <p class="muted tiny">This moves all assignments from the first person into the second, then removes the first.</p>
+          <p class="muted tiny">Moves everything from the first person to the second, then removes the first.</p>
         </form>
-      </div>
       <% } %>
+      <p class="muted small">To add someone new, choose “Someone else…” next to any <%= spotWord %> above.</p>
     </div>
-    <div id="manage-data" data-assignments='<%- assignmentsJson %>' data-participants='<%- JSON.stringify(participants || []) %>' hidden></div>
-  </article>
+  </details>
 </section>
 
-<% if (hasTimeBlocks) { %>
-<section class="page-section page-shell">
-  <% if (!isPotluck) { %>
-    <div class="slot-toolbar">
-      <div class="slot-toolbar__group">
-        <label class="slot-toolbar__label" for="slot-view-mode">View selections by</label>
-        <select id="slot-view-mode" class="slot-toolbar__select">
-          <option value="station" selected>Station</option>
-          <option value="time">Date &amp; time</option>
-        </select>
-      </div>
-    </div>
-    <div id="slots-by-time" class="slot-view slot-view--time" hidden>
-      <ul id="slots-by-time-list" class="time-block-list"></ul>
-    </div>
-  <% } %>
-
-  <div id="slots-by-station" class="slot-view slot-view--station">
-    <h3 class="step-heading"><%= isPotluck ? 'Step 2: Review items' : 'Step 2: Review opportunities' %></h3>
-    <div class="station-grid">
-      <% stations.forEach(station => { %>
-        <% const blocks = Array.isArray(station.time_blocks) ? station.time_blocks : (station.time_blocks ? Object.values(station.time_blocks) : []); %>
-        <% if (blocks.length > 0) { %>
-          <article class="card station-card">
-            <div class="card-header">
-            <div class="station-card__title">
-              <h2><%= isPotluck ? 'Category' : 'Station' %>: <%= station.name %></h2>
-              <% const stationAbout = station.about || station.description || ''; %>
-              <% const stationDuties = station.duties || ''; %>
-              <% const factCount = (stationAbout ? 1 : 0) + (stationDuties ? 1 : 0); %>
-              <% if (stationAbout || stationDuties) { %>
-                <div class="station-quick-facts <%= factCount === 1 ? 'station-quick-facts--single' : '' %>">
-                  <% if (stationAbout) { %>
-                    <div class="station-quick-fact">
-                      <h3>Description</h3>
-                      <div class="rich-text"><%- helpers.renderRichText(stationAbout) %></div>
-                    </div>
-                  <% } %>
-                  <% if (stationDuties) { %>
-                    <div class="station-quick-fact">
-                      <h3>Duties</h3>
-                      <div class="rich-text"><%- helpers.renderRichText(stationDuties) %></div>
-                    </div>
-                  <% } %>
-                </div>
-              <% } %>
-            </div>
-            </div>
-            <ul class="time-block-list">
-              <% blocks.forEach(block => { %>
-                <% const isSelected = Array.isArray(selectedBlockIds) && selectedBlockIds.includes(block.block_id); %>
-                <% var existingNote = potluckNotes[block.block_id] || ''; %>
-                <li
-                  class="time-block-item <%= block.is_full && !isSelected ? 'is-full' : '' %> <%= isSelected ? 'selected' : '' %> <%= isPotluck ? 'is-potluck' : '' %>"
-                  data-block-id="<%= block.block_id %>"
-                  data-station-id="<%= station.station_id %>"
-                  data-station-name="<%= station.name %>"
-                  data-start-time="<%= isPotluck ? '' : block.start_time %>"
-                  data-end-time="<%= isPotluck ? '' : block.end_time %>"
-                  <% if (isPotluck) { %>data-item-title="<%= (block.title || '').replace(/\"/g, '&quot;') %>"<% } %>
-                  <% if (isPotluck) { %>data-dish-note="<%= (existingNote || '').replace(/\"/g, '&quot;') %>"<% } %>
-                  data-is-full="<%= !!block.is_full && !isSelected %>"
-                  role="button"
-                  aria-pressed="<%= isSelected ? 'true' : 'false' %>"
-                  tabindex="<%= block.is_full && !isSelected ? -1 : 0 %>"
-                >
-                  <div class="time-block-item__info">
-                    <span class="station-chip muted" data-role="station-chip"><%= isPotluck ? 'Category' : 'Station' %>: <%= station.name %></span>
-                    <% if (isPotluck) { %>
-                      <strong><%= block.title || 'Item' %></strong>
-                    <% } else { %>
-                      <strong><%= helpers.fmtRange(block.start_time, block.end_time) %></strong>
-                    <% } %>
-                    <% if (isPotluck) { %>
-                      <% const hasServings = block.servings_min != null || block.servings_max != null; %>
-                      <% if (hasServings) { %>
-                        <span class="muted">
-                          • Feeds: <%= (block.servings_min != null) ? block.servings_min : '' %><%= (block.servings_max != null) ? ('–' + block.servings_max) : '' %>
-                        </span>
-                      <% } %>
-                    <% } else { %>
-                      <span class="muted"> • Slots: <%= block.capacity_needed %></span>
-                    <% } %>
-                    <span class="muted"> • Signed up: <%= block.reserved_count || 0 %><% if (typeof block.capacity_needed !== 'undefined' && block.capacity_needed != null) { %> / <%= block.capacity_needed %><% } %></span>
-                    <span class="slot-conflict-note" data-role="conflict-note" hidden></span>
-                    <div class="time-block-item__hint" data-role="assign-hint">
-                      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10.011 10.011 0 0 0 12 2Zm1 15h-2v-2h2Zm0-4h-2V7h2Z"/></svg>
-                      <span class="assign-hint-text">Pick a participant, then click “Assign” to <%= isPotluck ? 'update this item' : 'update this time block' %>.</span>
-                    </div>
-                  </div>
-                  <% if (isPotluck) { %>
-                    <% const _notes = Array.isArray(block.dish_notes) ? block.dish_notes : []; const _shown = _notes.slice(0, 5); const _more = _notes.length - _shown.length; %>
-                    <div class="time-block-item__others">
-                      <% if (_shown.length) { %>
-                        <div class="dish-notes-inline" title="Items others have signed up to prepare (duplicates welcome)"><svg class="info-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 4a1.25 1.25 0 1 1 0 2.5A1.25 1.25 0 0 1 12 6Zm-1.25 4.75h2.5v7h-2.5v-7Z"/></svg><strong class="muted">Others signed up</strong></div>
-                        <ul class="dish-notes-list" title="Items others have signed up to prepare (duplicates welcome)">
-                          <% _shown.forEach(function(n){ %>
-                            <% if (typeof n === 'object') { %>
-                              <li><%= n.text %><% if (n.by) { %> (<%= n.by %>)<% } %></li>
-                            <% } else { %>
-                              <li><%= n %></li>
-                            <% } %>
-                          <% }) %>
-                          <% if (_more > 0) { %><li>+<%= _more %> more</li><% } %>
-                        </ul>
-                      <% } %>
-                    </div>
-                  <% } %>
-                  <div class="time-block-item__action">
-                    <% if (block.is_full && !isSelected) { %>
-                      <span class="badge">Full</span>
-                    <% } else { %>
-                      <button type="button" class="btn btn-ghost select-slot-btn"><%= isSelected ? 'Selected' : (isPotluck ? 'Sign up' : 'Select') %></button>
-                    <% } %>
-                  </div>
-                </li>
-              <% }) %>
-            </ul>
-          </article>
-        <% } %>
-      <% }) %>
-    </div>
-  </div>
-</section>
-
-<% } else { %>
-  <section class="page-section page-shell">
-    <article class="card card--plain empty-state">
-      <h2>No sign-ups available</h2>
-      <p class="muted">We couldn’t find any sign-up opportunities for this event right now. Reach out to the coordinator if you need assistance.</p>
-      <div class="action-row">
-        <a class="btn btn-ghost" href="/events">Back to sign-ups</a>
-      </div>
-    </article>
+<% if (hasSlots) { %>
+  <section class="page-section page-section--compact page-shell" id="positions" aria-labelledby="positions-heading">
+    <h3 id="positions-heading" class="step-heading">Add more</h3>
+    <%- include('../partials/positions', { event, isPotluck, mode: 'manage', summary }) %>
   </section>
 <% } %>
 
-<section class="page-section page-shell">
-  <% if (isPotluck) { %>
-    <h3 id="step2Heading" class="step-heading">Step 3: Enter dish names <span id="selectedCountBadge" class="selection-count-badge" style="display:none;"></span></h3>
-    <div id="selected-slots-panel" class="card card--plain signup-panel" style="display:block;">
-      <div id="selected-slots-container"></div>
-    </div>
-    <h3 id="step3Heading" class="step-heading">Step 3: Save your changes</h3>
-  <% } else { %>
-    <h3 id="step2Heading" class="step-heading">Step 3: Save your changes <span id="selectedCountBadge" class="selection-count-badge" style="display:none;"></span></h3>
-  <% } %>
-  <div id="signup-form" class="card card--plain signup-panel" style="display:block;">
-    <p class="muted">Select or deselect any selections above, then save. You can also remove all selections to cancel your signup.</p>
-    <div id="save-review" class="save-review muted" aria-live="polite">
-      <p class="muted">Your selections will appear here so you can review before saving.</p>
-    </div>
-    <form id="signupFormTag" action="/manage/<%= token %><%= debugCapacity ? '?debug=capacity' : '' %>" method="POST" novalidate data-mode="manage" data-is-potluck="<%= isPotluck ? 'true' : 'false' %>">
-      <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
-      <input type="hidden" name="registration_payload" id="registration-payload">
-      <div id="signup-client-errors" class="notice notice--error" style="display:none;"></div>
-      <div class="card-actions">
-        <button type="submit" class="btn btn-primary">Save changes</button>
-      </div>
-    </form>
-  </div>
-</section>
+<div class="picks-bar" data-role="picks-bar" hidden>
+  <span class="picks-bar__text" data-role="picks-bar-text"></span>
+  <button type="button" class="btn btn-primary" data-role="picks-bar-go">Review &amp; save</button>
+</div>
 
 <section class="page-section page-shell email-pref-section" id="email-preferences">
   <details class="email-pref-accordion" aria-label="Email preferences">
@@ -320,14 +172,22 @@
       </article>
     </div>
   </details>
+  <p class="muted small">
+    Need help? <a href="/help">Open the volunteer help guide</a><% if (supportEmail) { %> or email <%= supportName %> at <a href="mailto:<%= supportEmail %>"><%= supportEmail %></a><% } %>.
+  </p>
 </section>
 
-<div id="selection-fab" class="selection-fab" hidden>
-  <button type="button" class="selection-fab__button">Go to save changes</button>
-</div>
+<script type="application/json" id="signup-data"><%- helpers.jsonForScript({
+  mode: 'manage',
+  eventId: event.event_id,
+  isPotluck,
+  allowOverlap: !!event.allow_overlap,
+  participants: (participants || []).map(function (p) { return { id: p.participant_id, name: p.participant_name }; }),
+  saved: savedAssignments,
+  pending: pendingPicks || []
+}) %></script>
 
-<!-- Toast root + data hook for client-side snackbar (must be inside <body>) -->
 <div id="toast-root" aria-live="polite" aria-atomic="true" style="position:fixed; inset: auto 0 max(16px, env(safe-area-inset-bottom)) 0; display:flex; justify-content:center; pointer-events:none; z-index:2000;"></div>
 <div id="manage-toast-data" hidden data-success="<%= (messages && messages.success && messages.success[0]) ? messages.success[0] : '' %>" data-debug="<%= (messages && messages.debug && messages.debug[0]) ? messages.debug[0] : '' %>"></div>
 
-<%- include('../partials/footer') %>
+<%- include('../partials/footer', { pageScripts: ['/js/signup.js'] }) %>

@@ -2,23 +2,24 @@
 
 <% const { fmt12 } = helpers; %>
 <% const isPotluck = String(event.signup_mode || '').toLowerCase() === 'potluck'; %>
-<% const debugLayout = !!locals.debugLayout; %>
-<% const selectedBlockIds = Array.isArray(locals.selectedBlockIds) ? locals.selectedBlockIds : []; %>
-<% const draftDishNotes = (locals.draftDishNotes && typeof locals.draftDishNotes === 'object') ? locals.draftDishNotes : {}; %>
-<% const formDefaults = locals.formDefaults || {}; %>
 <% const brandInfo = locals.brand || {}; %>
 <% const supportEmail = brandInfo.supportContactEmail || ''; %>
 <% const supportName = brandInfo.supportContactName || brandInfo.orgName || 'our team'; %>
-
-<!-- Inline preview indicator now appears near the title; no separate banner -->
+<% const isPreview = typeof preview !== 'undefined' && preview; %>
+<% const mine = locals.mySignup || null; %>
+<% const draftReg = locals.draftRegistration || null; %>
+<% const draftRegistrant = (draftReg && draftReg.registrant) || {}; %>
+<% const stations = Array.isArray(event.stations) ? event.stations : Object.values(event.stations || {}); %>
+<% const hasSlots = stations.some(s => Array.isArray(s.time_blocks) && s.time_blocks.length > 0); %>
+<% const spotWord = isPotluck ? 'item' : 'spot'; %>
 
 <section class="page-header page-header--compact page-shell">
   <div>
-    <% if (!(typeof preview !== 'undefined' && preview)) { %>
+    <% if (!isPreview) { %>
       <a href="/events" class="btn-link">&larr; Back to sign-ups</a>
     <% } %>
     <h1>
-      <% if (typeof preview !== 'undefined' && preview) { %>
+      <% if (isPreview) { %>
         <span class="preview-chip" title="Admin-only preview">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M2 12s4.5-7 10-7 10 7 10 7-4.5 7-10 7-10-7-10-7Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -36,7 +37,6 @@
       <p class="page-subtitle"><%= fmt12(event.date_start) %> — <%= fmt12(event.date_end) %></p>
     <% } %>
   </div>
-  </div>
   <% if (typeof backTo === 'string' && backTo) { %>
     <div class="page-header__actions">
       <a href="<%= backTo %>" class="btn btn-accent small">
@@ -47,30 +47,29 @@
   <% } %>
 </section>
 
-<section class="page-section page-section--compact page-shell <%= debugLayout ? 'debug-layout' : '' %>">
-  <article class="card card--plain" data-debug="<%= debugLayout ? 'station-card' : '' %>">
-    <% if (event.description) { %>
+<section class="page-section page-section--compact page-shell">
+  <% if (event.description) { %>
+    <article class="card card--plain">
       <div class="rich-text"><%- helpers.renderRichText(event.description) %></div>
-    <% } else { %>
-      <p class="muted"><%= isPotluck ? 'Select a category and item to prepare.' : 'Details for this event are coming soon. Select a station and time block that fits your schedule.' %></p>
-    <% } %>
-  </article>
+    </article>
+  <% } %>
   <details class="page-help event-detail__help">
     <summary class="page-help__summary">
-      <span class="page-help__summary-title">Need help getting started?</span>
+      <span class="page-help__summary-title">How signing up works</span>
       <span class="page-help__summary-meta">Tap or click for quick tips</span>
     </summary>
     <div class="page-help__body">
-      <p>
-        Need instructions? <a href="/help">Open the volunteer help guide</a> for a quick refresher on choosing a time slot or food item.
-      </p>
+      <ol>
+        <li>Browse the <%= spotWord %>s below and tap “Sign up” on anything you can help with.</li>
+        <li>Enter your contact info and choose who is filling each <%= spotWord %> — you, or someone you are signing up.</li>
+        <li>Confirm. We’ll email a link so you can see, change, or add to your sign-up later.</li>
+      </ol>
+      <p>More detail: <a href="/help">volunteer help guide</a>.</p>
       <% if (supportEmail) { %>
         <p class="page-help__contact">
           Questions? Email <strong><%= supportName %></strong> at
           <a class="page-help__email" href="mailto:<%= supportEmail %>"><%= supportEmail %></a>.
         </p>
-      <% } else { %>
-        <p class="page-help__contact">Questions? Reply to your confirmation email and we’ll be in touch.</p>
       <% } %>
     </div>
   </details>
@@ -78,238 +77,123 @@
 
 <%- include('../partials/messages') %>
 
-<section class="page-section page-section--compact page-shell" aria-label="Manage link reminder">
-  <details class="disclosure">
-    <summary class="disclosure__summary">
-      <svg class="disclosure__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 15h-2v-6h2v6Zm-1-8.75a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5Z"/></svg>
-      Already signed up? Email me my manage link
-    </summary>
-    <div class="disclosure__panel">
-      <form action="/manage/remind" method="POST" class="disclosure__form" novalidate>
-        <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
-        <input type="hidden" name="eventId" value="<%= event.event_id %>">
-        <label class="sr-only" for="remind-email">Email</label>
-        <input id="remind-email" class="input-inline" type="email" name="email" placeholder="Enter the email you used to sign up" required>
-        <button type="submit" class="btn btn-outline">Send link</button>
-      </form>
-      <p class="disclosure__help">For returning participants who already registered. We’ll email a secure link to manage your selections.</p>
-    </div>
-  </details>
-</section>
-
-<%
-  const stations = Array.isArray(event.stations) ? event.stations : Object.values(event.stations || {});
-  const hasTimeBlocks = stations.some(s => Array.isArray(s.time_blocks) && s.time_blocks.length > 0);
-  const draftReg = locals.draftRegistration || {};
-  const draftRegistrant = draftReg.registrant || draftReg;
-  const draftParticipants = Array.isArray(draftReg.participants) ? draftReg.participants : [];
-  const partySizeDefault = Number(draftReg.party_size || draftReg.partySize || draftParticipants.length || 1);
-  const registrantParticipating = (draftReg.registrant_participating || draftReg.participating || 'yes') !== 'no';
-%>
-
-<section class="page-section page-section--compact page-shell">
-  <h3 class="step-heading">Step 1: Registrant &amp; participants</h3>
-  <article class="card card--plain signup-panel">
-    <div id="step1-errors" class="notice notice--error" style="display:none;"></div>
-    <div class="form-grid two">
-      <div class="form-group">
-        <label for="signup-name">Your name</label>
-        <input form="signupFormTag" type="text" id="signup-name" name="name" placeholder="Full Name" value="<%= draftRegistrant && draftRegistrant.name ? draftRegistrant.name : '' %>" required>
-      </div>
-      <div class="form-group">
-        <label for="signup-email">Email</label>
-        <input form="signupFormTag" type="email" id="signup-email" name="email" placeholder="you@example.com" value="<%= draftRegistrant && draftRegistrant.email ? draftRegistrant.email : '' %>" required>
-      </div>
-      <div class="form-group full">
-        <label for="signup-phone">Phone (optional)</label>
-        <input form="signupFormTag" type="tel" id="signup-phone" name="phone" placeholder="(555) 555-1234" value="<%= draftRegistrant && draftRegistrant.phone ? draftRegistrant.phone : '' %>">
-      </div>
-    </div>
-    <div class="form-grid two">
-      <div class="form-group">
-        <label>Are you also participating?</label>
-        <div class="radio-group">
-          <label><input form="signupFormTag" type="radio" name="registrant_participating" value="yes" <%= registrantParticipating ? 'checked' : '' %>> Yes</label>
-          <label><input form="signupFormTag" type="radio" name="registrant_participating" value="no" <%= registrantParticipating ? '' : 'checked' %>> No</label>
-        </div>
-      </div>
-      <div class="form-group">
-        <label for="party-size">How many people are you signing up?</label>
-        <input form="signupFormTag" type="number" min="1" id="party-size" name="party_size" value="<%= partySizeDefault || 1 %>">
-      </div>
-    </div>
-    <div class="form-group">
-      <label>Participant names</label>
-      <p class="muted small">Add everyone in your party. If you are participating, keep yourself on the list.</p>
-      <div id="participant-list"
-        data-participants='<%- JSON.stringify(draftParticipants) %>'
-        data-registrant-name="<%= draftRegistrant && draftRegistrant.name ? draftRegistrant.name.replace(/\"/g, '&quot;') : '' %>"
-        data-registrant-participating="<%= registrantParticipating ? 'yes' : 'no' %>">
-      </div>
-    </div>
-    <div class="card-actions">
-      <button type="button" class="btn btn-primary" id="step1-continue">Continue to Step 2</button>
-    </div>
-  </article>
-</section>
-
-<% if (hasTimeBlocks) { %>
-  <section id="selection-step" class="page-section page-section--compact page-shell <%= debugLayout ? 'debug-layout' : '' %>" data-debug="<%= debugLayout ? 'page-shell' : '' %>" style="display:none;">
-    <% if (!isPotluck) { %>
-      <div class="slot-toolbar">
-        <div class="slot-toolbar__group">
-          <label class="slot-toolbar__label" for="slot-view-mode">View selections by</label>
-          <select id="slot-view-mode" class="slot-toolbar__select">
-            <option value="station" selected>Station</option>
-            <option value="time">Date &amp; time</option>
-          </select>
-        </div>
-      </div>
-
-      <div id="slots-by-time" class="slot-view slot-view--time" hidden>
-        <ul id="slots-by-time-list" class="time-block-list"></ul>
-      </div>
-    <% } %>
-
-    <div id="slots-by-station" class="slot-view slot-view--station">
-      <h3 class="step-heading"><%= isPotluck ? 'Step 2: Select items' : 'Step 2: Select opportunities' %></h3>
-      <div class="station-grid">
-        <% stations.forEach(station => { %>
-          <% const blocks = Array.isArray(station.time_blocks) ? station.time_blocks : (station.time_blocks ? Object.values(station.time_blocks) : []); %>
-          <% if (blocks.length > 0) { %>
-            <article class="card station-card" data-debug="<%= debugLayout ? 'station-card' : '' %>">
-              <div class="card-header" data-debug="<%= debugLayout ? 'card-header' : '' %>">
-              <div class="station-card__title">
-                <h2><%= isPotluck ? 'Category' : 'Station' %>: <%= station.name %></h2>
-                <% const stationAbout = station.about || station.description || ''; %>
-                <% const stationDuties = station.duties || ''; %>
-                <% const factCount = (stationAbout ? 1 : 0) + (stationDuties ? 1 : 0); %>
-                <% if (stationAbout || stationDuties) { %>
-                  <div class="station-quick-facts <%= factCount === 1 ? 'station-quick-facts--single' : '' %>" data-debug="<%= debugLayout ? 'station-quick-facts' : '' %>">
-                    <% if (stationAbout) { %>
-                      <div class="station-quick-fact" data-debug="<%= debugLayout ? 'station-quick-fact' : '' %>">
-                        <h3>Description</h3>
-                        <div class="rich-text"><%- helpers.renderRichText(stationAbout) %></div>
-                      </div>
-                    <% } %>
-                    <% if (stationDuties) { %>
-                      <div class="station-quick-fact" data-debug="<%= debugLayout ? 'station-quick-fact' : '' %>">
-                        <h3>Duties</h3>
-                        <div class="rich-text"><%- helpers.renderRichText(stationDuties) %></div>
-                      </div>
-                    <% } %>
-                  </div>
-                <% } %>
-              </div>
-              </div>
-              <ul class="time-block-list">
-                <% blocks.forEach(block => { %>
-                <% const isSelected = Array.isArray(selectedBlockIds) && selectedBlockIds.includes(block.block_id); %>
-                <% var existingNote = ''; if (isPotluck && draftDishNotes && typeof draftDishNotes === 'object' && Object.prototype.hasOwnProperty.call(draftDishNotes, block.block_id)) { existingNote = draftDishNotes[block.block_id]; } %>
-                <li
-                  class="time-block-item <%= block.is_full && !isSelected ? 'is-full' : '' %> <%= isSelected ? 'selected' : '' %> <%= isPotluck ? 'is-potluck' : '' %>"
-                  data-block-id="<%= block.block_id %>"
-                  data-station-id="<%= station.station_id %>"
-                  data-station-name="<%= station.name %>"
-                  data-capacity="<%= typeof block.capacity_needed !== 'undefined' ? block.capacity_needed : (block.capacity ?? '') %>"
-                  data-reserved="<%= block.reserved_count || 0 %>"
-                  data-start-time="<%= isPotluck ? '' : block.start_time %>"
-                  data-end-time="<%= isPotluck ? '' : block.end_time %>"
-                  <% if (isPotluck) { %>data-item-title="<%= (block.title || '').replace(/\"/g, '&quot;') %>"<% } %>
-                  <% if (isPotluck && existingNote) { %>data-dish-note="<%= (existingNote || '').replace(/\"/g, '&quot;') %>"<% } %>
-                  data-is-full="<%= !!block.is_full && !isSelected %>"
-                  role="button"
-                  aria-pressed="<%= isSelected ? 'true' : 'false' %>"
-                  tabindex="<%= block.is_full && !isSelected ? -1 : 0 %>"
-                  data-debug="<%= debugLayout ? 'time-block-item' : '' %>"
-                >
-                    <div class="time-block-item__info">
-                      <span class="station-chip muted" data-role="station-chip"><%= isPotluck ? 'Category' : 'Station' %>: <%= station.name %></span>
-                      <% if (isPotluck) { %>
-                        <strong><%= block.title || 'Item' %></strong>
-                      <% } else { %>
-                        <strong><%= helpers.fmtRange(block.start_time, block.end_time) %></strong>
-                      <% } %>
-                    <% if (isPotluck) { %>
-                        <% const hasServings = block.servings_min != null || block.servings_max != null; %>
-                        <% if (hasServings) { %>
-                          <span class="muted">
-                            • Feeds: <%= (block.servings_min != null) ? block.servings_min : '' %><%= (block.servings_max != null) ? ('–' + block.servings_max) : '' %>
-                          </span>
-                        <% } %>
-                      <% } else { %>
-                        <span class="muted"> • Slots: <%= typeof block.capacity_needed !== 'undefined' ? block.capacity_needed : (block.capacity ?? '') %></span>
-                      <% } %>
-                      <span class="muted"> • Signed up: <%= block.reserved_count || 0 %><% if (typeof block.capacity_needed !== 'undefined' && block.capacity_needed != null) { %> / <%= block.capacity_needed %><% } %></span>
-                      <% /* Food prep "Others signed up" is rendered in the dedicated right column below. */ %>
-                      <span class="slot-conflict-note" data-role="conflict-note" hidden></span>
-                      <div class="time-block-item__hint" data-role="assign-hint">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10.011 10.011 0 0 0 12 2Zm1 15h-2v-2h2Zm0-4h-2V7h2Z"/></svg>
-                        <span class="assign-hint-text">Pick a participant, then click “Assign” to add this <%= isPotluck ? 'item' : 'time block' %>.</span>
-                      </div>
-                    </div>
-                    <% if (isPotluck) { %>
-                      <% const _notes = Array.isArray(block.dish_notes) ? block.dish_notes : []; const _shown = _notes.slice(0, 5); const _more = _notes.length - _shown.length; %>
-                      <div class="time-block-item__others">
-                        <% if (_shown.length) { %>
-                          <div class="dish-notes-inline" title="Items others have signed up to prepare (duplicates welcome)"><svg class="info-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 4a1.25 1.25 0 1 1 0 2.5A1.25 1.25 0 0 1 12 6Zm-1.25 4.75h2.5v7h-2.5v-7Z"/></svg><strong class="muted">Others signed up</strong></div>
-                          <ul class="dish-notes-list" title="Items others have signed up to prepare (duplicates welcome)">
-                            <% _shown.forEach(function(n){ %>
-                              <% if (typeof n === 'object') { %>
-                                <li><%= n.text %><% if (n.by) { %> (<%= n.by %>)<% } %></li>
-                              <% } else { %>
-                                <li><%= n %></li>
-                              <% } %>
-                            <% }) %>
-                            <% if (_more > 0) { %><li>+<%= _more %> more</li><% } %>
-                          </ul>
-                        <% } %>
-                      </div>
-                    <% } %>
-                    <div class="time-block-item__action">
-                      <% if (block.is_full) { %>
-                        <span class="badge">Full</span>
-                      <% } else { %>
-                        <button type="button" class="btn btn-ghost select-slot-btn"><%= isPotluck ? 'Sign up' : 'Select' %></button>
-                      <% } %>
-                    </div>
-                  </li>
-                <% }) %>
-              </ul>
-            </article>
-          <% } %>
+<% if (mine) { %>
+  <section class="page-section page-section--compact page-shell" aria-labelledby="your-signups-heading">
+    <article class="card card--plain my-signup">
+      <h2 id="your-signups-heading" class="my-signup__title">You’re signed up<%= mine.registrantName ? `, ${mine.registrantName.split(' ')[0]}` : '' %>!</h2>
+      <p class="muted">Here’s what your group already has for this event (<%= mine.total %> <%= mine.total === 1 ? spotWord : spotWord + 's' %>).</p>
+      <ul class="my-signup__list">
+        <% mine.people.filter(p => p.items.length).forEach(p => { %>
+          <li>
+            <strong><%= p.name %></strong>
+            <ul>
+              <% p.items.forEach(item => { %>
+                <li><%= item.label %><% if (item.dishName) { %> <span class="muted">(<%= item.dishName %>)</span><% } %></li>
+              <% }) %>
+            </ul>
+          </li>
         <% }) %>
+      </ul>
+      <div class="action-row">
+        <a class="btn btn-primary" href="<%= mine.manageUrl %>">Add more or make changes</a>
+        <form action="/events/<%= event.event_id %>/forget" method="POST" class="inline-form">
+          <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
+          <button type="submit" class="btn btn-link">Not you? Start a new sign-up</button>
+        </form>
       </div>
-    </div>
+    </article>
+  </section>
+<% } else if (!isPreview) { %>
+  <section class="page-section page-section--compact page-shell" aria-label="Manage link reminder">
+    <details class="disclosure">
+      <summary class="disclosure__summary">
+        <svg class="disclosure__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 15h-2v-6h2v6Zm-1-8.75a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5Z"/></svg>
+        Already signed up? See what you have
+      </summary>
+      <div class="disclosure__panel">
+        <form action="/manage/remind" method="POST" class="disclosure__form" novalidate>
+          <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
+          <input type="hidden" name="eventId" value="<%= event.event_id %>">
+          <label class="sr-only" for="remind-email">Email</label>
+          <input id="remind-email" class="input-inline" type="email" name="email" placeholder="Enter the email you used to sign up" required>
+          <button type="submit" class="btn btn-outline">Email me my link</button>
+        </form>
+        <p class="disclosure__help">We’ll email a secure link that shows your current sign-ups, where you can add more or make changes.</p>
+      </div>
+    </details>
+  </section>
+<% } %>
+
+<% if (hasSlots) { %>
+  <section class="page-section page-section--compact page-shell" id="positions" aria-labelledby="positions-heading">
+    <h3 id="positions-heading" class="step-heading">
+      <%= mine ? 'What’s still needed' : (isPotluck ? 'Step 1: Choose what you’d like to bring' : 'Step 1: Choose where you’d like to help') %>
+    </h3>
+    <%- include('../partials/positions', {
+      event,
+      isPotluck,
+      mode: mine ? 'remembered' : 'signup',
+      summary: mine,
+      addBaseUrl: mine ? mine.manageUrl : ''
+    }) %>
   </section>
 
-  <section id="review-step" class="page-section page-shell" style="display:none;">
-    <% if (isPotluck) { %>
-      <h3 id="step2Heading" class="step-heading" style="display:none;">Step 3: Enter dish names <span id="selectedCountBadge" class="selection-count-badge" style="display:none;"></span></h3>
-      <div id="selected-slots-panel" class="card card--plain signup-panel" style="display:none;">
-        <div id="selected-slots-container"></div>
-      </div>
-      <h3 id="step3Heading" class="step-heading" style="display:none;">Step 4: Review &amp; submit</h3>
-    <% } else { %>
-      <h3 id="step2Heading" class="step-heading" style="display:none;">Step 3: Review selections <span id="selectedCountBadge" class="selection-count-badge" style="display:none;"></span></h3>
-      <div id="selected-slots-panel" class="card card--plain signup-panel" style="display:none;">
-        <div id="selected-slots-container"></div>
-      </div>
-      <h3 id="step3Heading" class="step-heading" style="display:none;">Step 4: Review &amp; submit</h3>
-    <% } %>
-    <div id="signup-form" class="card card--plain signup-panel" style="display:none;">
-      <p class="muted">Review your selections and submit your group registration.</p>
-      <form id="signupFormTag" action="/signup" method="POST" novalidate data-is-potluck="<%= isPotluck ? 'true' : 'false' %>">
-        <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
-        <input type="hidden" name="eventId" value="<%= event.event_id %>">
-        <input type="hidden" name="registration_payload" id="registration-payload" value="<%= helpers.escapeHtml(JSON.stringify(draftReg || {})) %>">
-        <div id="signup-client-errors" class="notice notice--error" style="display:none;"></div>
-        <div class="card-actions">
-          <button type="submit" class="btn btn-primary">Confirm registration</button>
-        </div>
-      </form>
+  <% if (!mine) { %>
+    <section class="page-section page-shell" id="signup-step" aria-labelledby="signup-step-heading">
+      <h3 id="signup-step-heading" class="step-heading">Step 2: Tell us who’s coming</h3>
+      <article class="card card--plain signup-panel">
+        <p class="muted" data-role="picks-empty">Tap “Sign up” on any <%= spotWord %> above. Your picks will show up here.</p>
+        <form id="signup-form" action="/signup" method="POST" novalidate data-role="picks-form" hidden>
+          <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
+          <input type="hidden" name="eventId" value="<%= event.event_id %>">
+          <input type="hidden" name="registration_payload" data-role="payload" value="">
+          <div class="notice notice--error" data-role="form-error" role="alert" hidden></div>
+
+          <fieldset class="signup-fieldset">
+            <legend>Your contact info</legend>
+            <div class="form-grid two">
+              <div class="form-group">
+                <label for="signup-name">Your name</label>
+                <input type="text" id="signup-name" name="name" autocomplete="name" placeholder="Full name" value="<%= draftRegistrant.name || '' %>" required>
+              </div>
+              <div class="form-group">
+                <label for="signup-email">Email</label>
+                <input type="email" id="signup-email" name="email" autocomplete="email" placeholder="you@example.com" value="<%= draftRegistrant.email || '' %>" required>
+              </div>
+              <div class="form-group full">
+                <label for="signup-phone">Phone (optional)</label>
+                <input type="tel" id="signup-phone" name="phone" autocomplete="tel" placeholder="(555) 555-1234" value="<%= draftRegistrant.phone || '' %>">
+              </div>
+            </div>
+            <p class="muted small">We’ll email a confirmation with a link to see, change, or add to your sign-up.</p>
+          </fieldset>
+
+          <fieldset class="signup-fieldset">
+            <legend>Who’s filling each <%= spotWord %>? <span class="selection-count-badge" data-role="picks-count"></span></legend>
+            <p class="muted small">Signing up family or friends? Choose “Someone else…” and type their name. One person can’t take the same <%= spotWord %> twice<%= (!isPotluck && !event.allow_overlap) ? ' or two spots at the same time' : '' %>.</p>
+            <ul class="pick-list" data-role="picks-list"></ul>
+          </fieldset>
+
+          <div class="card-actions">
+            <button type="submit" class="btn btn-primary">Confirm sign-up</button>
+          </div>
+        </form>
+      </article>
+    </section>
+
+    <div class="picks-bar" data-role="picks-bar" hidden>
+      <span class="picks-bar__text" data-role="picks-bar-text"></span>
+      <button type="button" class="btn btn-primary" data-role="picks-bar-go">Continue</button>
     </div>
-  </section>
+
+    <script type="application/json" id="signup-data"><%- helpers.jsonForScript({
+      mode: 'signup',
+      eventId: event.event_id,
+      isPotluck,
+      allowOverlap: !!event.allow_overlap,
+      draft: draftReg
+    }) %></script>
+  <% } %>
 <% } else { %>
   <section class="page-section page-shell">
     <article class="card card--plain empty-state">
@@ -322,8 +206,4 @@
   </section>
 <% } %>
 
-<%- include('../partials/footer') %>
-
-<div id="selection-fab" class="selection-fab" hidden>
-  <button type="button" class="selection-fab__button">Continue to sign-up</button>
- </div>
+<%- include('../partials/footer', { pageScripts: ['/js/signup.js'] }) %>

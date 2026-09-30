@@ -23,9 +23,9 @@
   <article class="card card--plain">
     <h2>Quick start</h2>
     <ol class="muted">
-      <li>Open the <a href="/events">Sign-ups</a> page. You’ll see the events that are open right now.</li>
-      <li>Press “View sign-ups” (or “Sign Up for Food Prep”) on the event you want.</li>
-      <li>Follow the steps shown on the page. You can always tap “Back to sign-ups” to change events.</li>
+      <li>Open the <a href="/events">Sign-ups</a> page. Each event shows how many spots or items are still needed.</li>
+      <li>Press “See what’s needed” on the event you want.</li>
+      <li>Pick what you’d like to do, then tell us who’s coming. That’s it — no account or password.</li>
     </ol>
   </article>
 </section>
@@ -34,11 +34,11 @@
   <article class="card card--plain">
     <h2>If the event uses time slots</h2>
     <ol class="muted">
-      <li>Step 1: Type your name and email. Add each person who might serve (each name must be different).</li>
-      <li>Step 2: For each time block, pick the person from the dropdown and press “Assign.” We block overlapping times for the same person automatically.</li>
-      <li>Step 3: Press “Submit,” skim the review screen, then confirm. We’ll email you a link to edit later.</li>
+      <li>Step 1: Browse the stations and times. Each one shows how many spots are open. Press “Sign up” on every spot you want — for yourself or for someone else. Use “View by time” or “Show only open spots” to narrow the list.</li>
+      <li>Step 2: Type your name and email. Next to each spot, choose who is filling it. For a family member or friend, choose “Someone else…” and type their name.</li>
+      <li>Press “Confirm sign-up.” You’ll see a summary on screen and get an email with a link to change things later.</li>
     </ol>
-    <p class="muted small">On a phone: scroll slowly, pick a person, then press “Assign.” If a time says “Full,” choose another.</p>
+    <p class="muted small">One person can’t take the same spot twice, or two spots at the same time. If someone is busy at that time, their name is greyed out and the spot says who is busy. On a phone, a bar at the bottom shows how many spots you’ve picked — press “Continue” to jump to Step 2.</p>
   </article>
 </section>
 
@@ -46,9 +46,9 @@
   <article class="card card--plain">
     <h2>If the event is Food Prep / Potluck</h2>
     <ol class="muted">
-      <li>Step 1: Type your contact info and the names of people helping you.</li>
-      <li>Step 2: Pick an item, choose the person bringing it, and type the dish name. Press “Assign.”</li>
-      <li>Step 3: Press “Submit,” check the quick review, then confirm. You’ll get an email with a link to edit.</li>
+      <li>Step 1: Look through the items. Each shows how many are still needed and what others are already bringing. Press “Sign up” on the items you’ll bring.</li>
+      <li>Step 2: Type your contact info. For each item, choose who is bringing it and type the dish name.</li>
+      <li>Press “Confirm sign-up.” You’ll get an email with a link to change things later.</li>
     </ol>
     <p class="muted small">Hints like “Feeds 6–8” show how big the dish should be. If an item is full, pick another.</p>
   </article>
@@ -56,13 +56,14 @@
 
 <section class="page-section page-shell">
   <article class="card card--plain">
-    <h2>Editing or canceling your signup</h2>
+    <h2>Seeing, adding to, or changing your sign-up</h2>
     <ol class="muted">
-      <li>Use the manage link from your confirmation email. Lost it? On the event page, click “Already signed up?” and we’ll email the link again.</li>
-      <li>On the Manage page you can rename people, reassign a time or item, or remove a slot. Use the dropdown next to each slot/item to switch the person.</li>
-      <li>To cancel everything, remove all assignments and submit. We’ll clean up the record once it’s empty.</li>
+      <li>On the same phone or computer you signed up with, the event page shows “You’re signed up” with everything your group has, right at the top. Press “Add more or make changes.”</li>
+      <li>On another device, use the link from your confirmation email. Lost it? On the event page, open “Already signed up? See what you have” and we’ll email it again.</li>
+      <li>Your sign-up page lists what you already have first. Change who is filling a spot, remove spots, or add more from the list below, then press “Save changes.”</li>
+      <li>To cancel everything, remove all your spots and save.</li>
     </ol>
-    <p class="muted small">Always submit changes so the roster updates for coordinators.</p>
+    <p class="muted small">Using a shared or public computer? Press “Not you? Start a new sign-up” on the event page so the next person doesn’t see your sign-up. Only the newest emailed link works, so if you ask for a new one, use that.</p>
   </article>
 </section>
 
@@ -70,12 +71,12 @@
   <article class="card card--plain">
     <h2>Troubleshooting</h2>
     <ul class="muted">
-      <li><strong>Overlap warning:</strong> if a participant conflicts, pick another participant or change the conflicting time. Overlapping is blocked for the same person.</li>
-      <li><strong>Slots show “Full”:</strong> choose another time or station; check back later in case capacity is increased.</li>
-      <li><strong>No confirmation email:</strong> check Promotions/Spam; request the manage link via the event page form; <% if (supportEmail) { %>or email <a href="mailto:<%= supportEmail %>"><%= supportEmail %></a><% } else { %>or try again later<% } %>.</li>
-      <li><strong>Duplicate email:</strong> If you try to start a new signup with an email that already has selections, we’ll stop you and resend the manage link so you can edit the existing signup instead of creating another.</li>
-      <li><strong>Can’t submit:</strong> make sure you assigned at least one slot/item, provided participant names, and filled in required contact info.</li>
-      <li><strong>On mobile:</strong> keep the page open until you see the success screen; avoid using the browser back button during form submission.</li>
+      <li><strong>“Busy then” or “Overlaps”:</strong> that person already has something at the same time. Choose someone else, or remove one of the spots.</li>
+      <li><strong>Spots show “Full”:</strong> choose another time or station; check back later in case more spots are added.</li>
+      <li><strong>No confirmation email:</strong> check Promotions/Spam; request the link again from the event page; <% if (supportEmail) { %>or email <a href="mailto:<%= supportEmail %>"><%= supportEmail %></a><% } else { %>or try again later<% } %>.</li>
+      <li><strong>“This email already has a sign-up”:</strong> each email has one sign-up per event. We email you the link right away — open it in the same browser and the spots you just picked will be waiting for you to save.</li>
+      <li><strong>Can’t confirm:</strong> make sure you picked at least one spot, chose who fills each one, and typed your name and a valid email.</li>
+      <li><strong>On mobile:</strong> keep the page open until you see the thank-you screen.</li>
     </ul>
   </article>
 </section>
