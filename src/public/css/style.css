@@ -4379,6 +4379,28 @@ button.group-chip { cursor: pointer; }
 .my-signup .action-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; }
 .my-signup .inline-form { margin: 0; }
 
+/* Add to calendar (thank-you + manage pages) */
+.calendar-links { margin: 1rem 0; padding-top: 1rem; border-top: 1px solid var(--border-soft); }
+.disclosure__panel .calendar-links { margin: 0; padding-top: 0; border-top: 0; }
+.calendar-links__title { margin: 0 0 0.3rem; font-size: 1rem; }
+.calendar-links .action-row { margin: 0.6rem 0; }
+.calendar-links__list { list-style: none; margin: 0.5rem 0 0; padding: 0; display: grid; gap: 0.45rem; }
+.calendar-links__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.2rem 1rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: var(--radius-md);
+  background: #f8fbff;
+  border: 1px solid rgba(37, 99, 235, 0.12);
+}
+.calendar-links__what { display: flex; flex-direction: column; min-width: 0; }
+.calendar-links__actions { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; font-size: 0.9rem; font-weight: 600; }
+.manage-calendar { margin: 0.75rem 0 0.25rem; display: block; }
+.manage-calendar .disclosure__panel { display: block; max-width: 640px; }
+
 /* Step 2 panel */
 .signup-fieldset { border: 0; padding: 0; margin: 0 0 1.25rem; min-width: 0; }
 .signup-fieldset legend { font-weight: 700; font-size: 1.02rem; margin-bottom: 0.6rem; padding: 0; }

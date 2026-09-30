@@ -11,6 +11,7 @@ const dal = require('../db/dal');
 const { fmt12, fmtRange: fmtSlotRange } = require('../views/helpers');
 const { sendMail } = require('../utils/mailer');
 const { getBranding } = require('../config/branding');
+const calendar = require('./calendarService');
 
 const APP_BASE_URL = (process.env.APP_BASE_URL || 'http://localhost:3000').replace(/\/$/, '');
 const TOKEN_TTL_DAYS = Number(process.env.MANAGE_TOKEN_TTL_DAYS || 30);
@@ -436,6 +437,14 @@ async function sendConfirmationEmail({ registration, event, participants, manage
       }).filter(Boolean).join('\n')
     : 'You currently have no reserved opportunities.';
 
+  const calendarEntries = calendar.buildEntries({
+    event,
+    participants,
+    registrationId: registration.registration_id,
+    manageUrl
+  });
+  const calendarUrl = calendarEntries.length && manageUrl ? `${manageUrl}/calendar.ics` : '';
+
   const complianceFooter = buildComplianceFooter({
     orgName,
     supportEmail,
@@ -455,8 +464,9 @@ async function sendConfirmationEmail({ registration, event, participants, manage
       lines.push('');
       lines.push('Here is your group schedule:');
     }
-    lines.push(listItems || 'No assignments yet.', '', `Manage your signup here: ${manageUrl}`, '',
-      'If you have any questions or run into trouble, reach out to us:');
+    lines.push(listItems || 'No assignments yet.', '', `Manage your signup here: ${manageUrl}`);
+    if (calendarUrl) lines.push(`Add to your calendar (file attached, or download): ${calendarUrl}`);
+    lines.push('', 'If you have any questions or run into trouble, reach out to us:');
     const contactLines = [];
     if (supportEmail) contactLines.push(`Email: ${supportEmail}`);
     if (supportPhone) contactLines.push(`Phone: ${supportPhone}`);
@@ -530,6 +540,12 @@ async function sendConfirmationEmail({ registration, event, participants, manage
                             </a>
                           </td>
                         </tr>
+                        ${calendarUrl ? `<tr>
+                          <td align="center" style="padding-top:14px; font-family:'Segoe UI', Arial, sans-serif; font-size:14px;">
+                            <a href="${escapeHtml(calendarUrl)}" style="color:#1d4ed8; font-weight:600; text-decoration:underline;" target="_blank" rel="noopener">Add to your calendar</a>
+                            <span style="color:#64748b;"> &middot; the calendar file is also attached</span>
+                          </td>
+                        </tr>` : ''}
                       </table>
                       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid rgba(15,23,42,0.08); margin-top:24px; padding-top:24px;">
                         <tr>
@@ -558,12 +574,20 @@ async function sendConfirmationEmail({ registration, event, participants, manage
 
   try {
     const headers = complianceFooter.listUnsubscribe ? { 'List-Unsubscribe': complianceFooter.listUnsubscribe } : undefined;
+    const attachments = calendarEntries.length
+      ? [{
+          filename: calendar.icsFilename(event),
+          content: calendar.toIcs(calendarEntries, { calendarName: event.name, orgName }),
+          contentType: 'text/calendar; charset=utf-8'
+        }]
+      : undefined;
     await sendMail({
       to: registration.registrant_email,
       subject,
       text,
       html,
-      headers
+      headers,
+      attachments
     });
   } catch (err) {
     console.error('Failed to send volunteer confirmation email:', err);
@@ -820,6 +844,7 @@ async function processVolunteerSignup(payload) {
 
     await sendConfirmationEmail({
       registration: {
+        registration_id: registrationId,
         registrant_name: registrant.name,
         registrant_email: registrant.email,
         email_opt_in: registrant.email_opt_in
@@ -855,6 +880,7 @@ async function processVolunteerSignup(payload) {
 
   await sendConfirmationEmail({
     registration: {
+      registration_id: registrationId,
       registrant_name: registrant.name,
       registrant_email: registrant.email,
       email_opt_in: registrant.email_opt_in
@@ -899,6 +925,38 @@ function getManageContext(token) {
     event,
     participants
   };
+}
+
+// .ics for a manage token: every entry, or just one slot when blockId is given.
+function getCalendarFile(token, blockId) {
+  const context = getManageContext(token);
+  if (!context) return null;
+  const { event, participants, registration } = context;
+  let entries = calendar.buildEntries({
+    event,
+    participants,
+    registrationId: registration.registration_id,
+    manageUrl: buildManageUrl(token)
+  });
+  if (blockId) entries = entries.filter(e => e.blockId === Number(blockId));
+  const { orgName } = getBranding();
+  return {
+    entries,
+    filename: calendar.icsFilename(event),
+    content: calendar.toIcs(entries, { calendarName: event.name, orgName })
+  };
+}
+
+function getCalendarLinks({ event, participants, registrationId, token }) {
+  if (!token) return null;
+  return calendar.buildCalendarLinks({
+    event,
+    participants,
+    registrationId,
+    token,
+    manageUrl: buildManageUrl(token),
+    formatRange: fmtSlotRange
+  });
 }
 
 /**
@@ -1347,6 +1405,8 @@ module.exports = {
   processVolunteerSignup,
   getManageContext,
   buildSignupSummary,
+  getCalendarFile,
+  getCalendarLinks,
   updateVolunteerSignup,
   sendManageReminder,
   checkDuplicateRegistration,

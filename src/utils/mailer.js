@@ -56,7 +56,7 @@ function createTransporter() {
   return cachedTransporter;
 }
 
-async function sendMail({ to, subject, text, html, from, replyTo, headers }) {
+async function sendMail({ to, subject, text, html, from, replyTo, headers, attachments }) {
   const transporter = createTransporter();
   const message = {
     from: from || transporter.__defaultFrom,
@@ -68,6 +68,9 @@ async function sendMail({ to, subject, text, html, from, replyTo, headers }) {
   };
   if (headers && typeof headers === 'object' && Object.keys(headers).length > 0) {
     message.headers = headers;
+  }
+  if (Array.isArray(attachments) && attachments.length) {
+    message.attachments = attachments;
   }
 
   const info = await transporter.sendMail(message);

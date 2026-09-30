@@ -62,6 +62,16 @@
     </form>
   </article>
 
+  <% if (locals.calendar && calendar.entries && calendar.entries.length) { %>
+    <details class="disclosure manage-calendar">
+      <summary class="disclosure__summary">Add to your calendar</summary>
+      <div class="disclosure__panel">
+        <%- include('../partials/calendar-links', { calendar, showTitle: false }) %>
+        <p class="muted small">This uses your saved sign-ups. After you save changes, download it again — your calendar updates the same entries.</p>
+      </div>
+    </details>
+  <% } %>
+
   <details class="disclosure manage-people">
     <summary class="disclosure__summary">Edit names in your group</summary>
     <div class="disclosure__panel participant-panel">
