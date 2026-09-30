@@ -7,11 +7,11 @@ const path = require('path');
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'volunteer-app-'));
 process.env.DB_PATH = path.join(tmpDir, 'test.db');
 
-const { initDatabase } = require('../src/config/database');
+const { initDatabase } = require('../../src/config/database');
 initDatabase();
 
-const dal = require('../src/db/dal');
-const publicService = require('../src/services/publicService');
+const dal = require('../../src/db/dal');
+const publicService = require('../../src/services/publicService');
 
 async function run() {
   // Schedule event setup
@@ -101,7 +101,9 @@ async function run() {
   console.log('publicService tests passed');
 }
 
-run().catch(err => {
-  console.error(err);
-  process.exit(1);
-});
+run()
+  .catch(err => {
+    console.error(err);
+    process.exitCode = 1;
+  })
+  .finally(() => fs.rmSync(tmpDir, { recursive: true, force: true }));

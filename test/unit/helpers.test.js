@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { fmt12, canonicalLocal } = require('../src/views/helpers');
+const { fmt12, canonicalLocal } = require('../../src/views/helpers');
 
 console.log('Running helpers unit tests...');
 
