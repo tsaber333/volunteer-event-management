@@ -943,7 +943,7 @@ function buildSignupSummary(event, participants) {
             if (Number(a.time_block_id) === Number(tb.block_id)) return;
             if (slotsOverlap(blockRange, range(a.start_time, a.end_time))) {
               (conflicts[tb.block_id] = conflicts[tb.block_id] || [])
-                .push(`${p.participant_name} is at ${a.station_name || 'another station'} then`);
+                .push(`${p.participant_name} is already signed up for ${a.station_name || 'another station'} at this time.`);
             }
           });
         });

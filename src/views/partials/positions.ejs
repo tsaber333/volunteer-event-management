@@ -111,7 +111,7 @@
                   <%= mine.length ? `Signed up: ${mine.join(', ')}` : '' %>
                 </p>
                 <p class="slot__note" data-role="note" <%= conflictNotes.length ? '' : 'hidden' %>>
-                  <%= conflictNotes.length ? `Overlaps: ${conflictNotes.join('; ')}` : '' %>
+                  <%= conflictNotes.join(' ') %>
                 </p>
                 <% if (isPotluck) { %>
                   <% const notes = Array.isArray(block.dish_notes) ? block.dish_notes : []; %>

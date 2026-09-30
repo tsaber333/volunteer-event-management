@@ -99,18 +99,29 @@
     people.push({ key: 'me', name: '', isRegistrant: true });
   }
 
+  // Returns null, { type: 'same' }, or { type: 'overlap', stationName }.
   function conflictFor(personKey, blockId, exceptUid) {
-    if (!personKey) return '';
+    if (!personKey) return null;
     const slot = slots.get(blockId);
     for (const pick of picks) {
       if (pick.uid === exceptUid || pick.personKey !== personKey) continue;
-      if (pick.blockId === blockId) return 'already has this';
+      if (pick.blockId === blockId) return { type: 'same' };
       if (checkOverlap && overlaps(slot, slots.get(pick.blockId))) {
         const other = slots.get(pick.blockId);
-        return `busy then (${other ? other.stationName : 'another spot'})`;
+        return { type: 'overlap', stationName: other ? other.stationName : 'another spot' };
       }
     }
-    return '';
+    return null;
+  }
+  function conflictOptionText(conflict) {
+    if (!conflict) return '';
+    return conflict.type === 'same' ? 'already signed up for this' : `already signed up for ${conflict.stationName} at this time`;
+  }
+  function conflictSentence(person, conflict) {
+    const isMe = person && person.isRegistrant;
+    const who = isMe ? 'You’re' : `${personName(person) || 'This person'} is`;
+    if (conflict.type === 'same') return `${who} already signed up for this ${spotWord}.`;
+    return `${who} already signed up for ${conflict.stationName} at this time.`;
   }
 
   function remaining(blockId) {
@@ -210,7 +221,7 @@
         const opt = document.createElement('option');
         opt.value = p.key;
         const reason = conflictFor(p.key, pick.blockId, pick.uid);
-        opt.textContent = reason ? `${personLabel(p)} — ${reason}` : personLabel(p);
+        opt.textContent = reason ? `${personLabel(p)} — ${conflictOptionText(reason)}` : personLabel(p);
         if (reason && p.key !== pick.personKey) opt.disabled = true;
         if (p.key === pick.personKey) opt.selected = true;
         select.appendChild(opt);
@@ -326,9 +337,8 @@
     if (!pick.personKey) return `Choose who is filling this ${spotWord}.`;
     const person = personByKey(pick.personKey);
     const reason = conflictFor(pick.personKey, pick.blockId, pick.uid);
-    const name = personName(person) || 'This person';
-    if (reason === 'already has this') return `${name} already has this ${spotWord}. Choose someone else or remove it.`;
-    if (reason) return `${name} is already signed up for something at the same time. Choose someone else or remove one.`;
+    if (reason && reason.type === 'same') return `${conflictSentence(person, reason)} Choose someone else or remove it.`;
+    if (reason) return `${conflictSentence(person, reason)} Choose someone else or remove one of them.`;
     if (remaining(pick.blockId) < 0) return `There aren’t enough open spots here any more. Remove one.`;
     return '';
   }
@@ -377,10 +387,10 @@
           .filter(p => !here.some(h => h.personKey === p.key))
           .map(p => {
             const r = conflictFor(p.key, slot.id, null);
-            return r && r !== 'already has this' ? `${personLabel(p)} is ${r}` : '';
+            return r && r.type === 'overlap' ? conflictSentence(p, r) : '';
           })
           .filter(Boolean);
-        note.textContent = busy.length ? `Overlaps: ${busy.join('; ')}` : '';
+        note.textContent = busy.join(' ');
         note.hidden = !busy.length;
       }
 
@@ -760,7 +770,8 @@
         const person = addPerson(p.personName);
         key = person ? person.key : null;
       }
-      if (key && conflictFor(key, blockId, null) === 'already has this') { skipped += 1; return; }
+      const existing = key ? conflictFor(key, blockId, null) : null;
+      if (existing && existing.type === 'same') { skipped += 1; return; }
       if (addPick(blockId, key, p.dishName || '')) added += 1;
     });
     if (pendingNote && (added || skipped)) {

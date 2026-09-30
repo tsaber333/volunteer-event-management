@@ -4387,8 +4387,12 @@ textarea {
   background: var(--text-strong);
   color: #fff;
   box-shadow: 0 18px 40px rgba(15, 23, 42, 0.32);
-  animation: selectionFabFade 160ms ease-in;
+  animation: picksBarIn 160ms ease-in;
   max-width: calc(100vw - 24px);
+}
+@keyframes picksBarIn {
+  from { opacity: 0; transform: translate(-50%, 10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
 }
 .picks-bar[hidden] { display: none; }
 .picks-bar__text { font-weight: 700; white-space: nowrap; }
