@@ -60,8 +60,9 @@
     </summary>
     <div class="page-help__body">
       <ol>
-        <li>Browse the <%= spotWord %>s below and tap “Sign up” on anything you can help with.</li>
-        <li>Enter your contact info and choose who is filling each <%= spotWord %> — you, or someone you are signing up.</li>
+        <li>Signing up family or friends? Add them under “Who’s coming?” (tap “Me” to leave yourself out).</li>
+        <li>Tap “Sign up” on anything you can help with. If more than one person could take it, tick who’s taking it.</li>
+        <li>Enter your contact info and check who is filling each <%= spotWord %>.</li>
         <li>Confirm. We’ll email a link so you can see, change, or add to your sign-up later.</li>
       </ol>
       <p>More detail: <a href="/help">volunteer help guide</a>.</p>
@@ -170,7 +171,7 @@
 
           <fieldset class="signup-fieldset">
             <legend>Who’s filling each <%= spotWord %>? <span class="selection-count-badge" data-role="picks-count"></span></legend>
-            <p class="muted small">You don’t have to fill a spot yourself — your name and email are just so we can reach you. For family or friends, choose “Someone else…” and type their name. One person can’t take the same <%= spotWord %> twice<%= (!isPotluck && !event.allow_overlap) ? ' or two spots at the same time' : '' %>.</p>
+            <p class="muted small">You don’t have to fill a spot yourself — your name and email are just so we can reach you. You can change who fills each spot below. One person can’t take the same <%= spotWord %> twice<%= (!isPotluck && !event.allow_overlap) ? ' or two spots at the same time' : '' %>.</p>
             <ul class="pick-list" data-role="picks-list"></ul>
           </fieldset>
 
