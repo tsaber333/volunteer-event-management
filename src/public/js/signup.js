@@ -50,6 +50,7 @@
       id,
       el,
       label: el.getAttribute('data-label') || '',
+      title: el.getAttribute('data-title') || '',
       stationName: el.getAttribute('data-station-name') || '',
       start: parseLocal(el.getAttribute('data-start')),
       end: parseLocal(el.getAttribute('data-end')),
@@ -197,117 +198,180 @@
       return (sa ? sa.label : '').localeCompare(sb ? sb.label : '') || a.uid - b.uid;
     });
 
+    const groups = [];
     ordered.forEach(pick => {
-      const slot = slots.get(pick.blockId);
-      const li = document.createElement('li');
-      li.className = 'pick';
-      li.dataset.uid = String(pick.uid);
-      li.dataset.blockId = String(pick.blockId);
-
-      const what = document.createElement('div');
-      what.className = 'pick__what';
-      const title = document.createElement('strong');
-      title.textContent = slot ? slot.label : `${spotWord} #${pick.blockId}`;
-      what.appendChild(title);
-      if (isManage && !pick.saved) {
-        const tag = document.createElement('span');
-        tag.className = 'pick__tag';
-        tag.textContent = 'New';
-        what.appendChild(tag);
-      }
-      li.appendChild(what);
-
-      const who = document.createElement('div');
-      who.className = 'pick__who';
-      const whoLabel = document.createElement('label');
-      whoLabel.className = 'pick__label';
-      whoLabel.setAttribute('for', `pick-who-${pick.uid}`);
-      whoLabel.textContent = 'Who';
-      const select = document.createElement('select');
-      select.id = `pick-who-${pick.uid}`;
-      if (!pick.personKey) {
-        const placeholder = document.createElement('option');
-        placeholder.value = '';
-        placeholder.textContent = 'Choose who…';
-        placeholder.selected = true;
-        placeholder.disabled = true;
-        select.appendChild(placeholder);
-      }
-      people.filter(p => isActive(p) || p.key === pick.personKey).forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.key;
-        const reason = conflictFor(p.key, pick.blockId, pick.uid);
-        opt.textContent = reason ? `${personLabel(p)} — ${conflictOptionText(reason)}` : personLabel(p);
-        if (reason && p.key !== pick.personKey) opt.disabled = true;
-        if (p.key === pick.personKey) opt.selected = true;
-        select.appendChild(opt);
-      });
-      const other = document.createElement('option');
-      other.value = NEW_PERSON;
-      other.textContent = 'Someone else…';
-      select.appendChild(other);
-      select.addEventListener('change', () => {
-        if (select.value === NEW_PERSON) {
-          showNewPersonInput(who, select, pick);
-          return;
-        }
-        pick.personKey = select.value;
-        refresh();
-      });
-      who.appendChild(whoLabel);
-      who.appendChild(select);
-      li.appendChild(who);
-
-      if (isPotluck) {
-        const dish = document.createElement('div');
-        dish.className = 'pick__dish';
-        const dishLabel = document.createElement('label');
-        dishLabel.className = 'pick__label';
-        dishLabel.setAttribute('for', `pick-dish-${pick.uid}`);
-        dishLabel.textContent = 'Dish';
-        const dishInput = document.createElement('input');
-        dishInput.type = 'text';
-        dishInput.id = `pick-dish-${pick.uid}`;
-        dishInput.maxLength = 200;
-        dishInput.placeholder = 'What are you bringing?';
-        dishInput.value = pick.dishName || '';
-        dishInput.addEventListener('input', () => {
-          pick.dishName = dishInput.value;
-          dishInput.classList.remove('input-error');
-          updatePayload();
-          updateDirty();
-        });
-        dish.appendChild(dishLabel);
-        dish.appendChild(dishInput);
-        li.appendChild(dish);
-      }
-
-      const remove = document.createElement('button');
-      remove.type = 'button';
-      remove.className = 'selected-slot-remove pick__remove';
-      remove.textContent = 'Remove';
-      remove.setAttribute('aria-label', `Remove ${slot ? slot.label : spotWord}`);
-      remove.addEventListener('click', () => {
-        removePick(pick.uid);
-        refresh();
-      });
-      li.appendChild(remove);
-
-      const problem = pickProblem(pick);
-      if (problem) {
-        li.classList.add('has-error');
-        const err = document.createElement('p');
-        err.className = 'pick__error';
-        err.textContent = problem;
-        li.appendChild(err);
-      }
-
-      picksList.appendChild(li);
+      const last = groups[groups.length - 1];
+      if (last && last.blockId === pick.blockId) last.picks.push(pick);
+      else groups.push({ blockId: pick.blockId, picks: [pick] });
     });
+    groups.forEach(group => picksList.appendChild(renderPickGroup(group)));
 
     if (picksEmpty) picksEmpty.hidden = picks.length > 0;
     if (!isManage) form.hidden = picks.length === 0;
     if (picksCount) picksCount.textContent = picks.length ? `(${picks.length})` : '';
+  }
+
+  // One compact block per spot; people who are fine show as removable chips.
+  function renderPickGroup(group) {
+    const slot = slots.get(group.blockId);
+    const li = document.createElement('li');
+    li.className = 'pick-group';
+    li.dataset.blockId = String(group.blockId);
+
+    const head = document.createElement('div');
+    head.className = 'pick-group__head';
+    const title = document.createElement('strong');
+    title.className = 'pick-group__title';
+    title.textContent = slot ? slot.stationName : `${spotWord} #${group.blockId}`;
+    head.appendChild(title);
+    if (slot && slot.title) {
+      const when = document.createElement('span');
+      when.className = 'pick-group__when';
+      when.textContent = slot.title;
+      head.appendChild(when);
+    }
+    li.appendChild(head);
+
+    const chips = document.createElement('div');
+    chips.className = 'pick-chips';
+    group.picks.forEach(pick => {
+      if (isPotluck || pickProblem(pick)) {
+        li.appendChild(buildPickRow(pick));
+        return;
+      }
+      chips.appendChild(buildPickChip(pick, slot));
+    });
+    if (chips.childNodes.length) li.insertBefore(chips, head.nextSibling);
+    return li;
+  }
+
+  function buildPickChip(pick, slot) {
+    const person = personByKey(pick.personKey);
+    const chip = document.createElement('span');
+    chip.className = 'pick-chip';
+    chip.dataset.uid = String(pick.uid);
+    const name = document.createElement('span');
+    name.textContent = personLabel(person);
+    chip.appendChild(name);
+    if (isManage && !pick.saved) {
+      const tag = document.createElement('span');
+      tag.className = 'pick__tag';
+      tag.textContent = 'New';
+      chip.appendChild(tag);
+    }
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'pick-chip__remove';
+    remove.textContent = '×';
+    remove.setAttribute('aria-label', `Remove ${personLabel(person)} from ${slot ? slot.label : spotWord}`);
+    remove.addEventListener('click', () => {
+      removePick(pick.uid);
+      refresh();
+    });
+    chip.appendChild(remove);
+    return chip;
+  }
+
+  // Full row with a "Who" dropdown: for picks that need attention (no one
+  // chosen, a clash) and for Food Prep items, which need a dish name.
+  function buildPickRow(pick) {
+    const slot = slots.get(pick.blockId);
+    const row = document.createElement('div');
+    row.className = 'pick';
+    row.dataset.uid = String(pick.uid);
+    row.dataset.blockId = String(pick.blockId);
+
+    const who = document.createElement('div');
+    who.className = 'pick__who';
+    const whoLabel = document.createElement('label');
+    whoLabel.className = 'pick__label';
+    whoLabel.setAttribute('for', `pick-who-${pick.uid}`);
+    whoLabel.textContent = 'Who';
+    if (isManage && !pick.saved) {
+      const tag = document.createElement('span');
+      tag.className = 'pick__tag';
+      tag.textContent = 'New';
+      whoLabel.appendChild(tag);
+    }
+    const select = document.createElement('select');
+    select.id = `pick-who-${pick.uid}`;
+    if (!pick.personKey) {
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = 'Choose who…';
+      placeholder.selected = true;
+      placeholder.disabled = true;
+      select.appendChild(placeholder);
+    }
+    people.filter(p => isActive(p) || p.key === pick.personKey).forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.key;
+      const reason = conflictFor(p.key, pick.blockId, pick.uid);
+      opt.textContent = reason ? `${personLabel(p)} — ${conflictOptionText(reason)}` : personLabel(p);
+      if (reason && p.key !== pick.personKey) opt.disabled = true;
+      if (p.key === pick.personKey) opt.selected = true;
+      select.appendChild(opt);
+    });
+    const other = document.createElement('option');
+    other.value = NEW_PERSON;
+    other.textContent = 'Someone else…';
+    select.appendChild(other);
+    select.addEventListener('change', () => {
+      if (select.value === NEW_PERSON) {
+        showNewPersonInput(who, select, pick);
+        return;
+      }
+      pick.personKey = select.value;
+      refresh();
+    });
+    who.appendChild(whoLabel);
+    who.appendChild(select);
+    row.appendChild(who);
+
+    if (isPotluck) {
+      const dish = document.createElement('div');
+      dish.className = 'pick__dish';
+      const dishLabel = document.createElement('label');
+      dishLabel.className = 'pick__label';
+      dishLabel.setAttribute('for', `pick-dish-${pick.uid}`);
+      dishLabel.textContent = 'Dish';
+      const dishInput = document.createElement('input');
+      dishInput.type = 'text';
+      dishInput.id = `pick-dish-${pick.uid}`;
+      dishInput.maxLength = 200;
+      dishInput.placeholder = 'What are you bringing?';
+      dishInput.value = pick.dishName || '';
+      dishInput.addEventListener('input', () => {
+        pick.dishName = dishInput.value;
+        dishInput.classList.remove('input-error');
+        updatePayload();
+        updateDirty();
+      });
+      dish.appendChild(dishLabel);
+      dish.appendChild(dishInput);
+      row.appendChild(dish);
+    }
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'selected-slot-remove pick__remove';
+    remove.textContent = 'Remove';
+    remove.setAttribute('aria-label', `Remove ${slot ? slot.label : spotWord}`);
+    remove.addEventListener('click', () => {
+      removePick(pick.uid);
+      refresh();
+    });
+    row.appendChild(remove);
+
+    const problem = pickProblem(pick);
+    if (problem) {
+      row.classList.add('has-error');
+      const err = document.createElement('p');
+      err.className = 'pick__error';
+      err.textContent = problem;
+      row.appendChild(err);
+    }
+    return row;
   }
 
   function showNewPersonInput(container, select, pick) {

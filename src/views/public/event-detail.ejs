@@ -152,13 +152,13 @@
 
           <fieldset class="signup-fieldset">
             <legend>Your picks <span class="selection-count-badge" data-role="picks-count"></span></legend>
-            <p class="muted small">Check who’s filling each <%= spotWord %>. One person can’t take the same <%= spotWord %> twice<%= (!isPotluck && !event.allow_overlap) ? ' or two spots at the same time' : '' %>.</p>
+            <p class="muted small"><%= isPotluck ? 'Check who’s bringing each item and what the dish is.' : 'Check who’s filling each spot. Tap × to take someone off.' %></p>
             <ul class="pick-list" data-role="picks-list"></ul>
           </fieldset>
 
           <fieldset class="signup-fieldset">
             <legend>Your contact info</legend>
-            <p class="muted small">So we can reach you — you don’t have to fill a <%= spotWord %> yourself.</p>
+            <p class="muted small">So we can reach you — you don’t have to <%= isPotluck ? 'bring an item' : 'fill a spot' %> yourself.</p>
             <div class="form-grid two">
               <div class="form-group">
                 <label for="signup-name">Your name</label>
