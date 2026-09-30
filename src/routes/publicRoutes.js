@@ -87,6 +87,7 @@ router.post('/manage/check-duplicate', publicController.checkDuplicateRegistrati
 
 // Manage existing signup via emailed token
 router.get('/manage/:token', publicController.showManageSignup);
+router.get('/manage/:token/calendar.ics', publicController.downloadCalendar);
 router.post(
   '/manage/:token',
   (req, res, next) => {

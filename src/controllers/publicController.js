@@ -236,6 +236,9 @@ exports.handleSignup = async (req, res, next) => {
         title: 'Sign-up Successful!',
         count: summary ? summary.total : 0,
         summary,
+        calendar: (evt && !result.alreadyRegistered)
+          ? publicService.getCalendarLinks({ event: evt, participants: result.participants, registrationId: result.registrationId, token: result.token })
+          : null,
         eventId: payload.eventId,
         eventName: evt ? evt.name : '',
         manageUrl: result.manageUrl,
@@ -314,6 +317,7 @@ exports.showManageSignup = (req, res, next) => {
             participants,
             pendingPicks,
             summary: publicService.buildSignupSummary(event, participants),
+            calendar: publicService.getCalendarLinks({ event, participants, registrationId: registration.registration_id, token }),
             helpers,
             emailPreferences,
             query: req.query,
@@ -323,6 +327,28 @@ exports.showManageSignup = (req, res, next) => {
         console.error('--- ERROR IN showManageSignup ---', error);
         next(error);
     }
+};
+
+exports.downloadCalendar = (req, res, next) => {
+  try {
+    const file = publicService.getCalendarFile(req.params.token, req.query.block);
+    if (!file) {
+      req.flash('error', 'That management link is no longer valid.');
+      return res.redirect('/events');
+    }
+    if (!file.entries.length) {
+      req.flash('error', 'There’s nothing to add to your calendar yet.');
+      return res.redirect(`/manage/${encodeURIComponent(req.params.token)}`);
+    }
+    res.set({
+      'Content-Type': 'text/calendar; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${file.filename}"`,
+      'Cache-Control': 'private, no-store'
+    });
+    res.send(file.content);
+  } catch (error) {
+    next(error);
+  }
 };
 
 exports.updateManageSignup = async (req, res, next) => {

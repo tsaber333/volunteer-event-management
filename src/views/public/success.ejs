@@ -37,6 +37,7 @@
         </ul>
       <% } %>
       <p class="muted small">Need to change something or add more? Use the link in your email, or the button below.</p>
+      <%- include('../partials/calendar-links', { calendar: locals.calendar }) %>
     <% } %>
     <div class="action-row">
       <% if (!alreadyRegistered && typeof manageUrl !== 'undefined' && manageUrl) { %>

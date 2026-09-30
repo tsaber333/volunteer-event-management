@@ -31,6 +31,7 @@ Run `npm run init-db` anytime to (re)create the SQLite schema in `db/volunteer.d
 - Step 2: Enter contact info and choose who fills each spot (the registrant or “Someone else…”); food prep also asks for dish names. On wide screens Step 2 is pinned beside the list; on phones/tablets the “Continue” bar opens it as a slide-up panel.
 - Confirm. The success page lists what was reserved and a manage link is emailed.
 - The same person can’t take one slot twice or two overlapping slots, unless an admin turns on “Let one person sign up for time slots that overlap” in Edit event (`events.allow_overlap`, off by default). Rules are enforced on the server for sign-up, manage, and admin moves.
+- Add to calendar: the thank-you page, manage page, and confirmation email (attached `.ics` plus a link) offer the group's slots as calendar entries — `GET /manage/:token/calendar.ics` (optionally `?block=<id>`) plus per-slot Google Calendar links. Times are converted from `APP_TIMEZONE` to UTC. Food Prep events get one entry (all-day if the event spans several days) listing everyone's dishes.
 - Returning on the same device: a `signup_<eventId>` cookie (httpOnly, lasts `MANAGE_TOKEN_TTL_DAYS`) shows “You’re signed up…” at the top of the event page, with a “Not you?” button that forgets it.
 - Signing up again with an email that already has a sign-up emails the manage link and holds the new picks in the session; opening the link in the same browser pre-loads them on the manage page.
 
@@ -51,6 +52,7 @@ Run `npm run init-db` anytime to (re)create the SQLite schema in `db/volunteer.d
 | `MAIL_SERVICE` / `MAIL_HOST` / `MAIL_PORT` / `MAIL_USER` / `MAIL_PASS` | Outgoing email settings (console logging is used if none provided). |
 | `APP_NAME`, `APP_TAGLINE`, `ORG_DISPLAY_NAME`, `BRAND_*`, `SUPPORT_CONTACT_*` | Branding and support info surfaced in headers, emails, and help pages. |
 | `MANAGE_TOKEN_TTL_DAYS` | How long emailed manage links remain valid (default 30). |
+| `APP_TIMEZONE` | IANA time zone that event times are entered in, used for calendar files and Google Calendar links (default `America/Vancouver`). |
 
 See `.env.example` for more options.
 

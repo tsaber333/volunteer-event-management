@@ -1,0 +1,31 @@
+<% const cal = locals.calendar; %>
+<% if (cal && cal.entries && cal.entries.length) { %>
+  <div class="calendar-links">
+    <% if (locals.showTitle !== false) { %><h3 class="calendar-links__title">Add to your calendar</h3><% } %>
+    <p class="muted small">
+      <%= cal.entries.length === 1 ? 'Download the calendar file' : `Download one file with all ${cal.entries.length}` %>
+      for Apple Calendar or Outlook, or add <%= cal.entries.length === 1 ? 'it' : 'each one' %> to Google Calendar.
+    </p>
+    <div class="action-row">
+      <a class="btn btn-outline small" href="<%= cal.icsUrl %>" download>
+        <%= cal.entries.length === 1 ? 'Download calendar file' : `Download all ${cal.entries.length} (.ics)` %>
+      </a>
+    </div>
+    <ul class="calendar-links__list">
+      <% cal.entries.forEach(entry => { %>
+        <li class="calendar-links__item">
+          <span class="calendar-links__what">
+            <strong><%= entry.title %></strong>
+            <% if (entry.when) { %><span class="muted small"><%= entry.when %></span><% } %>
+          </span>
+          <span class="calendar-links__actions">
+            <a href="<%= entry.googleUrl %>" target="_blank" rel="noopener">Google Calendar</a>
+            <% if (cal.entries.length > 1) { %>
+              <a href="<%= entry.icsUrl %>" download>Just this one (.ics)</a>
+            <% } %>
+          </span>
+        </li>
+      <% }) %>
+    </ul>
+  </div>
+<% } %>
