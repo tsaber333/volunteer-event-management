@@ -3,7 +3,7 @@
 <section class="page-header page-header--compact page-shell">
   <div class="page-header__intro page-header__intro--full">
     <h1>Upcoming Sign-ups</h1>
-    <p class="page-subtitle">Browse open volunteer shifts, outreach projects, and food prep items—then choose what fits your schedule.</p>
+    <p class="page-subtitle">See where help is still needed, then sign up yourself, your family, or friends in a couple of taps.</p>
     <%
       const brandInfo = locals.brand || {};
       const supportEmail = brandInfo.supportContactEmail || '';
@@ -64,27 +64,42 @@
               <p class="event-card__hero-text"><%= isPotluck ? 'Sign up to prep food or bring an item.' : 'Pick a time slot to lend a hand.' %></p>
             <% } %>
           </div>
-        </div>
-        <div class="<%= metaClasses %>">
-          <span class="event-card__meta-icon" aria-hidden="true">
-            <img src="/img/event-icon-calendar.svg" alt="" loading="lazy" decoding="async">
-          </span>
-          <div>
-            <% if (sameDay) { %>
-              <p class="event-card__date"><time datetime="<%= startISO %>"><%= startDateLabel %></time></p>
-              <p class="event-card__time">
-                <time datetime="<%= startISO %>"><%= timeOnly(start) %></time>
-                &nbsp;–&nbsp;
-                <time datetime="<%= endISO %>"><%= timeOnly(end) %></time>
-              </p>
-            <% } else { %>
-              <p class="event-card__date">Starts <time datetime="<%= startISO %>"><%= startDateLabel %> · <%= timeOnly(start) %></time></p>
-              <p class="event-card__time">Ends <time datetime="<%= endISO %>"><%= endDateLabel %> · <%= timeOnly(end) %></time></p>
-            <% } %>
+          <div class="<%= metaClasses %>">
+            <span class="event-card__meta-icon" aria-hidden="true">
+              <img src="/img/event-icon-calendar.svg" alt="" loading="lazy" decoding="async">
+            </span>
+            <div>
+              <% if (sameDay) { %>
+                <p class="event-card__date"><time datetime="<%= startISO %>"><%= startDateLabel %></time></p>
+                <p class="event-card__time">
+                  <time datetime="<%= startISO %>"><%= timeOnly(start) %></time>
+                  &nbsp;–&nbsp;
+                  <time datetime="<%= endISO %>"><%= timeOnly(end) %></time>
+                </p>
+              <% } else { %>
+                <p class="event-card__date">Starts <time datetime="<%= startISO %>"><%= startDateLabel %> · <%= timeOnly(start) %></time></p>
+                <p class="event-card__time">Ends <time datetime="<%= endISO %>"><%= endDateLabel %> · <%= timeOnly(end) %></time></p>
+              <% } %>
+            </div>
           </div>
         </div>
+        <% const totalSpots = Number(event.total_spots) || 0; %>
+        <% const openSpots = Math.max(totalSpots - (Number(event.filled_spots) || 0), 0); %>
+        <% const spotWord = isPotluck ? 'item' : 'spot'; %>
+        <div class="event-card__needs">
+          <% if (totalSpots === 0) { %>
+            <p class="event-card__needs-text muted">Sign-ups opening soon</p>
+          <% } else if (openSpots === 0) { %>
+            <p class="event-card__needs-text event-card__needs-text--done">Every <%= spotWord %> is filled — thank you!</p>
+          <% } else { %>
+            <p class="event-card__needs-text"><%= openSpots %> of <%= totalSpots %> <%= spotWord %>s still needed</p>
+          <% } %>
+          <% if (totalSpots > 0) { %>
+            <span class="spots-bar" aria-hidden="true"><span class="spots-bar__fill" style="width: <%= Math.round(((totalSpots - openSpots) / totalSpots) * 100) %>%"></span></span>
+          <% } %>
+        </div>
         <div class="card-actions">
-          <a href="/events/<%= event.event_id %>" class="btn btn-primary"><%= isPotluck ? 'Sign Up for Food Prep' : 'View sign-ups' %></a>
+          <a href="/events/<%= event.event_id %>" class="btn btn-primary"><%= openSpots > 0 ? 'See what’s needed' : 'View event' %></a>
           <button type="button"
                   class="btn btn-outline share-link__copy-btn"
                   aria-label="Copy share link for <%= event.name %>"

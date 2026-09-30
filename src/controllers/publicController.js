@@ -7,6 +7,100 @@ const publicService = require('../services/publicService');
 const createError = require('http-errors');
 const helpers = require('../views/helpers');
 
+// "Remember this device": after signing up (or opening a manage link) we keep
+// the manage token in an httpOnly cookie scoped to the event, so returning
+// visitors see what they already have before signing up for more.
+const REMEMBER_DAYS = Number(process.env.MANAGE_TOKEN_TTL_DAYS || 30);
+const TOKEN_PATTERN = /^[a-f0-9]{16,128}$/i;
+const MAX_PENDING_PICKS = 50;
+
+function rememberCookieName(eventId) {
+  return `signup_${Number(eventId)}`;
+}
+
+function readCookie(req, name) {
+  const header = req.headers && req.headers.cookie;
+  if (!header) return '';
+  for (const part of header.split(';')) {
+    const idx = part.indexOf('=');
+    if (idx < 0 || part.slice(0, idx).trim() !== name) continue;
+    try { return decodeURIComponent(part.slice(idx + 1).trim()); } catch (_) { return ''; }
+  }
+  return '';
+}
+
+function rememberSignup(res, eventId, token) {
+  if (!eventId || !token || !TOKEN_PATTERN.test(token)) return;
+  res.cookie(rememberCookieName(eventId), token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: Math.max(REMEMBER_DAYS, 1) * 24 * 60 * 60 * 1000,
+    path: '/'
+  });
+}
+
+function forgetSignup(res, eventId) {
+  if (!eventId) return;
+  res.clearCookie(rememberCookieName(eventId), { path: '/' });
+}
+
+function getRememberedSignup(req, res, event) {
+  const token = readCookie(req, rememberCookieName(event.event_id));
+  if (!token) return null;
+  const ctx = TOKEN_PATTERN.test(token) ? publicService.getManageContext(token) : null;
+  if (!ctx || Number(ctx.registration.event_id) !== Number(event.event_id)) {
+    forgetSignup(res, event.event_id);
+    return null;
+  }
+  const summary = publicService.buildSignupSummary(event, ctx.participants);
+  if (!summary.total) return null;
+  return {
+    ...summary,
+    token,
+    manageUrl: `/manage/${token}`,
+    registrantName: ctx.registration.registrant_name || ''
+  };
+}
+
+// Picks are kept as { blockId, personName, dishName } so they survive being
+// handed from the sign-up page to a manage link for an existing registration.
+function picksFromPayload(payload) {
+  if (!payload || typeof payload !== 'object') return [];
+  const names = Array.isArray(payload.participants)
+    ? payload.participants.map(p => String((p && (p.name || p.participant_name)) || p || '').trim())
+    : [];
+  const sched = Array.isArray(payload.scheduleAssignments) ? payload.scheduleAssignments : [];
+  const pot = Array.isArray(payload.potluckAssignments) ? payload.potluckAssignments : [];
+  const picks = [];
+  sched.forEach(a => {
+    const blockId = Number(a && a.blockId);
+    if (Number.isFinite(blockId)) picks.push({ blockId, personName: names[Number(a.participantIndex)] || '', dishName: '' });
+  });
+  pot.forEach(a => {
+    const blockId = Number(a && a.itemId);
+    if (Number.isFinite(blockId)) {
+      picks.push({ blockId, personName: names[Number(a.participantIndex)] || '', dishName: String(a.dishName || '').slice(0, 200) });
+    }
+  });
+  return picks.slice(0, MAX_PENDING_PICKS).map(p => ({ ...p, personName: p.personName.slice(0, 100) }));
+}
+
+function stashPendingPicks(req, eventId, picks) {
+  if (!req.session || !eventId || !picks.length) return;
+  req.session.pendingPicks = req.session.pendingPicks || {};
+  req.session.pendingPicks[String(Number(eventId))] = picks;
+}
+
+function takePendingPicks(req, eventId) {
+  const store = req.session && req.session.pendingPicks;
+  const key = String(Number(eventId));
+  if (!store || !store[key]) return [];
+  const picks = Array.isArray(store[key]) ? store[key] : [];
+  delete store[key];
+  return picks;
+}
+
 function redactRequestBody(body) {
     if (!body || typeof body !== 'object') return {};
     try {
@@ -82,8 +176,9 @@ exports.showEventDetail = (req, res, next) => {
             return res.redirect('/events');
         }
         const debugLayout = String(req.query.debug || '').toLowerCase() === 'layout';
+        const mySignup = preview ? null : getRememberedSignup(req, res, event);
         // Do not pass messages explicitly; app middleware exposes res.locals.messages
-        res.render('public/event-detail', { title: event.name, event, helpers, preview, backTo, debugLayout, query: req.query });
+        res.render('public/event-detail', { title: event.name, event, helpers, preview, backTo, debugLayout, mySignup, query: req.query });
     } catch (error) {
         console.error(`--- ERROR IN showEventDetail for eventId: ${req.params.eventId} ---`, error);
         next(error);
@@ -129,9 +224,20 @@ exports.handleSignup = async (req, res, next) => {
 
     try {
       const result = await publicService.processVolunteerSignup(payload);
+      if (result.alreadyRegistered) {
+        stashPendingPicks(req, payload.eventId, picksFromPayload(payload));
+      }
+      if (result.token) rememberSignup(res, payload.eventId, result.token);
+      const evt = publicService.getEventDetailsForPublic(payload.eventId);
+      const summary = (evt && result.participants)
+        ? publicService.buildSignupSummary(evt, result.participants)
+        : null;
       res.render('public/success', {
         title: 'Sign-up Successful!',
-        count: 1,
+        count: summary ? summary.total : 0,
+        summary,
+        eventId: payload.eventId,
+        eventName: evt ? evt.name : '',
         manageUrl: result.manageUrl,
         alreadyRegistered: result.alreadyRegistered,
         volunteerEmail: payload.registrant ? payload.registrant.email : req.body.email
@@ -147,11 +253,26 @@ exports.handleSignup = async (req, res, next) => {
           message: error.message,
         };
         try { req.flash('debug', JSON.stringify(debugBlob, null, 2)); } catch (_) {}
-        const evt = publicService.getEventDetailsForPublic(payload.eventId);
-        return res.status(error.status || 400).render('public/event-detail', { title: (evt && evt.name) || 'Event', event: evt, messages: req.flash(), helpers, draftRegistration: payload });
       }
-      res.redirect(`/events/${payload.eventId}`);
+      // Re-render with the draft so volunteers keep their picks and details.
+      const evt = publicService.getEventDetailsForPublic(payload.eventId);
+      if (!evt) return res.redirect('/events');
+      return res.status(error.status || 400).render('public/event-detail', {
+        title: evt.name,
+        event: evt,
+        messages: req.flash(),
+        helpers,
+        draftRegistration: payload
+      });
     }
+};
+
+// "Not you?" on the event page: stop remembering this device's sign-up.
+exports.forgetRememberedSignup = (req, res) => {
+  const eventId = Number(req.params.eventId);
+  forgetSignup(res, eventId);
+  req.flash('success', 'This device no longer shows that sign-up. You can start a new one below.');
+  return res.redirect(Number.isFinite(eventId) ? `/events/${eventId}` : '/events');
 };
 
 exports.showManageSignup = (req, res, next) => {
@@ -164,13 +285,17 @@ exports.showManageSignup = (req, res, next) => {
         }
 
         const { event, participants, registration } = context;
-        const assignmentsData = {
-          participants: participants || []
-        };
-        const selectedBlockIds = [];
-        (participants || []).forEach(p => {
-          (p.schedule || []).forEach(a => selectedBlockIds.push(a.time_block_id));
-          (p.potluck || []).forEach(a => selectedBlockIds.push(a.item_id));
+        rememberSignup(res, event.event_id, token);
+
+        // Picks carried over from the event page: held picks from a sign-up
+        // attempt with an already-registered email, or "?add=<id>" links.
+        const pendingPicks = takePendingPicks(req, event.event_id);
+        const addParam = req.query.add;
+        (Array.isArray(addParam) ? addParam : (addParam ? [addParam] : [])).forEach(raw => {
+          const blockId = Number(raw);
+          if (Number.isFinite(blockId) && pendingPicks.length < MAX_PENDING_PICKS) {
+            pendingPicks.push({ blockId, personName: '', dishName: '' });
+          }
         });
         const emailPreferences = {
             optIn: Number(registration.email_opt_in ?? 1) !== 0,
@@ -187,8 +312,8 @@ exports.showManageSignup = (req, res, next) => {
             token,
             registration,
             participants,
-            assignmentsJson: JSON.stringify(assignmentsData),
-            selectedBlockIds,
+            pendingPicks,
+            summary: publicService.buildSignupSummary(event, participants),
             helpers,
             emailPreferences,
             query: req.query,
@@ -242,6 +367,7 @@ exports.updateManageSignup = async (req, res, next) => {
       req.flash('debug', JSON.stringify(result.debug, null, 2));
     }
     if (result && result.deleted) {
+      forgetSignup(res, result.eventId);
       req.flash('success', 'Your selections have been cleared.');
       return res.redirect(result.eventId ? `/events/${result.eventId}` : '/events');
     }
@@ -302,7 +428,10 @@ exports.checkDuplicateRegistration = async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Missing event or email.' });
     }
     const result = await publicService.checkDuplicateRegistration(eventId, email);
-    return res.json(result);
+    if (result && result.duplicate) {
+      stashPendingPicks(req, eventId, picksFromPayload(req.body.payload));
+    }
+    return res.json({ ok: result.ok, duplicate: !!result.duplicate });
   } catch (err) {
     console.error('--- ERROR IN checkDuplicateRegistration ---', err);
     return res.status(500).json({ ok: false, error: 'Unable to check duplicates.' });

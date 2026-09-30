@@ -19,6 +19,9 @@
       </div>
     </footer>
     <script src="/js/main.js" defer></script>
+    <% (Array.isArray(locals.pageScripts) ? locals.pageScripts : []).forEach(function (src) { %>
+      <script src="<%= src %>" defer></script>
+    <% }) %>
     <% const layout = locals.layoutVariant || 'public'; %>
     <% if (layout === 'admin') { %>
       <script src="/js/admin-event-detail.js" defer></script>

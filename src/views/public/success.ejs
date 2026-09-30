@@ -1,31 +1,51 @@
 <%- include('../partials/header', { title, user: locals.user, layoutVariant: 'public' }) %>
 
+<% const summaryData = locals.summary || null; %>
+
 <section class="page-header page-shell">
   <div>
     <% if (alreadyRegistered) { %>
-      <h1>You're already on the schedule</h1>
-      <p class="page-subtitle">It looks like you were already signed up. We’ve resent your manage link for convenience.</p>
+      <h1>You already have a sign-up for this event</h1>
+      <p class="page-subtitle">We emailed your manage link to <strong><%= volunteerEmail %></strong>.</p>
     <% } else { %>
       <h1>Thank you for signing up!</h1>
-      <p class="page-subtitle">We’ve recorded your sign-up and will see you soon.</p>
+      <p class="page-subtitle">A confirmation email is on its way to <strong><%= volunteerEmail %></strong>.</p>
     <% } %>
   </div>
 </section>
 
 <section class="page-section page-shell">
-  <article class="card card--plain empty-state">
+  <article class="card card--plain my-signup">
     <% if (alreadyRegistered) { %>
-      <h2>We’ve got you covered</h2>
-      <p>You were already registered for your selections. We just resent the manage link to <strong><%= volunteerEmail %></strong>. If you don’t see it, please check your junk or spam folder.</p>
+      <h2 class="my-signup__title">Open the link in your email</h2>
+      <p>It shows what you already have for this event. If you open it in this browser, the spots you just picked will be waiting there for you to review and save. Can’t find it? Check your junk or spam folder.</p>
     <% } else { %>
-      <h2>You're all set 🎉</h2>
-      <p>You reserved <strong><%= count %></strong> <%= count === 1 ? 'selection' : 'selections' %>. A confirmation email is on its way.</p>
+      <h2 class="my-signup__title">You’re all set<%= eventName ? ` for ${eventName}` : '' %></h2>
+      <p class="muted">You reserved <strong><%= count %></strong> <%= count === 1 ? 'spot' : 'spots' %>:</p>
+      <% if (summaryData && summaryData.people.length) { %>
+        <ul class="my-signup__list">
+          <% summaryData.people.filter(p => p.items.length).forEach(p => { %>
+            <li>
+              <strong><%= p.name %></strong>
+              <ul>
+                <% p.items.forEach(item => { %>
+                  <li><%= item.label %><% if (item.dishName) { %> <span class="muted">(<%= item.dishName %>)</span><% } %></li>
+                <% }) %>
+              </ul>
+            </li>
+          <% }) %>
+        </ul>
+      <% } %>
+      <p class="muted small">Need to change something or add more? Use the link in your email, or the button below.</p>
     <% } %>
     <div class="action-row">
-      <a href="/events" class="btn btn-primary">Browse more sign-ups</a>
-      <% if (typeof manageUrl !== 'undefined' && manageUrl) { %>
-        <a href="<%= manageUrl %>" class="btn btn-ghost">Manage my signup</a>
+      <% if (!alreadyRegistered && typeof manageUrl !== 'undefined' && manageUrl) { %>
+        <a href="<%= manageUrl %>" class="btn btn-primary">See or change my sign-up</a>
       <% } %>
+      <% if (typeof eventId !== 'undefined' && eventId) { %>
+        <a href="/events/<%= eventId %>" class="btn btn-ghost">Back to this event</a>
+      <% } %>
+      <a href="/events" class="btn btn-ghost">Browse more sign-ups</a>
     </div>
   </article>
 </section>

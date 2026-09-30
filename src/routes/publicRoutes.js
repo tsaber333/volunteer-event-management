@@ -62,6 +62,9 @@ router.get(
   publicController.showEventDetail
 );
 
+// "Not you?" — stop remembering this device's sign-up for the event
+router.post('/events/:eventId/forget', publicController.forgetRememberedSignup);
+
 // Lost manage link reminder — define BEFORE /manage/:token to avoid capturing "remind" as a token
 router.get('/manage/remind', (req, res) => {
   // No UI here; this route exists to prevent /manage/:token from capturing it on GET

@@ -134,4 +134,15 @@ function renderRichText(input) {
   return out.join('');
 }
 
-module.exports = { fmt12, canonicalLocal, fmtRange, renderRichText, escapeHtml };
+/**
+ * Serialise data for a <script type="application/json"> block. Escapes "<" so
+ * user-entered text can never close the script tag early.
+ */
+function jsonForScript(value) {
+  return JSON.stringify(value == null ? null : value)
+    .replace(/</g, '\\u003c')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
+module.exports = { fmt12, canonicalLocal, fmtRange, renderRichText, escapeHtml, jsonForScript };

@@ -1,0 +1,147 @@
+<%
+  // Positions list shared by the event page and the manage page.
+  // Locals: event, isPotluck, mode ('signup' | 'manage' | 'remembered'),
+  //         summary (optional: { byBlock, conflicts }), addBaseUrl (remembered mode).
+  const posStations = (Array.isArray(event.stations) ? event.stations : Object.values(event.stations || {}))
+    .map(st => ({ ...st, time_blocks: Array.isArray(st.time_blocks) ? st.time_blocks : Object.values(st.time_blocks || {}) }))
+    .filter(st => st.time_blocks.length > 0);
+  const posSummary = (typeof summary !== 'undefined' && summary) ? summary : { byBlock: {}, conflicts: {} };
+  const posMode = (typeof mode !== 'undefined' && mode) ? mode : 'signup';
+  let totalSpots = 0;
+  let openSpots = 0;
+  posStations.forEach(st => st.time_blocks.forEach(b => {
+    const cap = Number(b.capacity_needed) || 0;
+    totalSpots += cap;
+    openSpots += Math.max(cap - (Number(b.reserved_count) || 0), 0);
+  }));
+  const spotWord = isPotluck ? 'item' : 'spot';
+%>
+<div class="positions" data-positions data-mode="<%= posMode %>">
+  <div class="positions__toolbar">
+    <p class="positions__summary" data-role="positions-summary">
+      <% if (totalSpots > 0 && openSpots > 0) { %>
+        <strong><%= openSpots %></strong> of <%= totalSpots %> <%= spotWord %>s still needed
+      <% } else if (totalSpots > 0) { %>
+        Every <%= spotWord %> is filled — thank you!
+      <% } %>
+    </p>
+    <div class="positions__controls">
+      <% if (!isPotluck) { %>
+        <label class="positions__control">
+          <span>View by</span>
+          <select data-role="view-mode" class="slot-toolbar__select">
+            <option value="station" selected>Station</option>
+            <option value="time">Date &amp; time</option>
+          </select>
+        </label>
+      <% } %>
+      <label class="positions__control positions__control--check">
+        <input type="checkbox" data-role="only-open">
+        <span>Show only open <%= spotWord %>s</span>
+      </label>
+    </div>
+  </div>
+
+  <div class="positions__time-view" data-role="time-view" hidden>
+    <ul class="slot-list" data-role="time-list"></ul>
+  </div>
+
+  <div class="station-grid positions__station-view" data-role="station-view">
+    <% posStations.forEach(station => { %>
+      <article class="card station-card positions__station" data-station-id="<%= station.station_id %>">
+        <div class="station-card__title">
+          <h2><%= station.name %></h2>
+          <% const stationAbout = station.about || station.description || ''; %>
+          <% const stationDuties = station.duties || ''; %>
+          <% if (stationAbout || stationDuties) { %>
+            <details class="positions__about">
+              <summary>About this <%= isPotluck ? 'category' : 'station' %></summary>
+              <div class="station-quick-facts <%= (stationAbout && stationDuties) ? '' : 'station-quick-facts--single' %>">
+                <% if (stationAbout) { %>
+                  <div class="station-quick-fact">
+                    <h3>Description</h3>
+                    <div class="rich-text"><%- helpers.renderRichText(stationAbout) %></div>
+                  </div>
+                <% } %>
+                <% if (stationDuties) { %>
+                  <div class="station-quick-fact">
+                    <h3>Duties</h3>
+                    <div class="rich-text"><%- helpers.renderRichText(stationDuties) %></div>
+                  </div>
+                <% } %>
+              </div>
+            </details>
+          <% } %>
+        </div>
+        <ul class="slot-list">
+          <% station.time_blocks.forEach(block => { %>
+            <%
+              const cap = Number(block.capacity_needed) || 0;
+              const reserved = Number(block.reserved_count) || 0;
+              const open = Math.max(cap - reserved, 0);
+              const pct = cap > 0 ? Math.min(100, Math.round((reserved / cap) * 100)) : 100;
+              const mine = posSummary.byBlock[block.block_id] || [];
+              const conflictNotes = posSummary.conflicts[block.block_id] || [];
+              const title = isPotluck ? (block.title || 'Item') : helpers.fmtRange(block.start_time, block.end_time);
+              const label = isPotluck ? `${station.name} — ${block.title || 'Item'}` : `${station.name} — ${title}`;
+              const isFull = open <= 0;
+            %>
+            <li class="slot <%= isFull ? 'is-full' : '' %> <%= mine.length ? 'is-mine' : '' %>"
+                data-block-id="<%= block.block_id %>"
+                data-station-name="<%= station.name %>"
+                data-label="<%= label %>"
+                data-title="<%= title %>"
+                data-start="<%= isPotluck ? '' : block.start_time %>"
+                data-end="<%= isPotluck ? '' : block.end_time %>"
+                data-capacity="<%= cap %>"
+                data-reserved="<%= reserved %>">
+              <div class="slot__main">
+                <span class="slot__station" data-role="station-chip"><%= station.name %></span>
+                <strong class="slot__title"><%= title %></strong>
+                <% if (isPotluck && (block.servings_min != null || block.servings_max != null)) { %>
+                  <span class="slot__meta">Feeds <%= block.servings_min != null ? block.servings_min : '' %><%= block.servings_max != null ? ('–' + block.servings_max) : '' %></span>
+                <% } %>
+                <div class="slot__spots">
+                  <span class="spots-bar" aria-hidden="true"><span class="spots-bar__fill" style="width: <%= pct %>%"></span></span>
+                  <span data-role="spots-text">
+                    <% if (isFull) { %>Full — thank you!<% } else { %><%= open %> of <%= cap %> <%= isPotluck ? 'still needed' : (cap === 1 ? 'spot open' : 'spots open') %><% } %>
+                  </span>
+                </div>
+                <p class="slot__mine" data-role="mine" <%= mine.length ? '' : 'hidden' %>>
+                  <%= mine.length ? `Signed up: ${mine.join(', ')}` : '' %>
+                </p>
+                <p class="slot__note" data-role="note" <%= conflictNotes.length ? '' : 'hidden' %>>
+                  <%= conflictNotes.join(' ') %>
+                </p>
+                <% if (isPotluck) { %>
+                  <% const notes = Array.isArray(block.dish_notes) ? block.dish_notes : []; %>
+                  <% if (notes.length) { %>
+                    <details class="slot__others">
+                      <summary>What others are bringing (<%= notes.length %>)</summary>
+                      <ul>
+                        <% notes.forEach(n => { %>
+                          <li><%= typeof n === 'object' ? n.text : n %><% if (typeof n === 'object' && n.by) { %> <span class="muted">(<%= n.by %>)</span><% } %></li>
+                        <% }) %>
+                      </ul>
+                    </details>
+                  <% } %>
+                <% } %>
+              </div>
+              <div class="slot__action">
+                <% if (posMode === 'remembered') { %>
+                  <% if (!isFull) { %>
+                    <a class="btn btn-outline small" href="<%= addBaseUrl %>?add=<%= block.block_id %>#your-signups">Add</a>
+                  <% } %>
+                <% } else { %>
+                  <button type="button" class="btn btn-primary slot__add" data-role="add" <%= isFull ? 'hidden' : '' %>>Sign up</button>
+                  <span class="slot__picked" data-role="picked" hidden></span>
+                <% } %>
+                <% if (isFull) { %><span class="badge" data-role="full-badge">Full</span><% } %>
+              </div>
+            </li>
+          <% }) %>
+        </ul>
+      </article>
+    <% }) %>
+  </div>
+</div>
