@@ -35,11 +35,24 @@ const offsetFormatter = new Intl.DateTimeFormat('en-US', {
   second: '2-digit'
 });
 
-function zoneOffsetMs(date) {
+function icuOffsetMs(date) {
   const p = {};
   offsetFormatter.formatToParts(date).forEach(part => { p[part.type] = part.value; });
   const wall = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second);
   return wall - Math.floor(date.getTime() / 1000) * 1000;
+}
+
+// B.C. stopped changing clocks: it stays on UTC−7 from 2026-11-01 02:00
+// (when it would have fallen back). Node builds with older time-zone data
+// still switch to UTC−8, so override them until Node's own data catches up.
+const HOUR_MS = 60 * 60 * 1000;
+const BC_PERMANENT_FROM = Date.UTC(2026, 10, 1, 9);
+const BC_NEEDS_OVERRIDE = TIME_ZONE === 'America/Vancouver'
+  && icuOffsetMs(new Date(Date.UTC(2027, 0, 15, 12))) === -8 * HOUR_MS;
+
+function zoneOffsetMs(date) {
+  if (BC_NEEDS_OVERRIDE && date.getTime() >= BC_PERMANENT_FROM) return -7 * HOUR_MS;
+  return icuOffsetMs(date);
 }
 
 // "2026-12-04 12:00" in TIME_ZONE -> Date (UTC instant).
