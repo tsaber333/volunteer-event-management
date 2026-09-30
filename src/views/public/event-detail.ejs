@@ -60,8 +60,9 @@
     </summary>
     <div class="page-help__body">
       <ol>
-        <li>Browse the <%= spotWord %>s below and tap “Sign up” on anything you can help with.</li>
-        <li>Enter your contact info and choose who is filling each <%= spotWord %> — you, or someone you are signing up.</li>
+        <li>Signing up family or friends? Add them under “Who’s coming?” (tap “Me” to leave yourself out).</li>
+        <li>Tap “Sign up” on anything you can help with. If more than one person could take it, tick who’s taking it.</li>
+        <li>Enter your contact info and check who is filling each <%= spotWord %>.</li>
         <li>Confirm. We’ll email a link so you can see, change, or add to your sign-up later.</li>
       </ol>
       <p>More detail: <a href="/help">volunteer help guide</a>.</p>
@@ -140,7 +141,7 @@
 
   <% if (!mine) { %>
     <section class="page-section page-shell" id="signup-step" aria-labelledby="signup-step-heading">
-      <h3 id="signup-step-heading" class="step-heading">Step 2: Tell us who’s coming</h3>
+      <h3 id="signup-step-heading" class="step-heading">Step 2: Review and confirm</h3>
       <article class="card card--plain signup-panel">
         <p class="muted" data-role="picks-empty">Tap “Sign up” on any <%= spotWord %> above. Your picks will show up here.</p>
         <form id="signup-form" action="/signup" method="POST" novalidate data-role="picks-form" hidden>
@@ -150,7 +151,14 @@
           <div class="notice notice--error" data-role="form-error" role="alert" hidden></div>
 
           <fieldset class="signup-fieldset">
+            <legend>Your picks <span class="selection-count-badge" data-role="picks-count"></span></legend>
+            <p class="muted small"><%= isPotluck ? 'Check who’s bringing each item and what the dish is.' : 'Check who’s filling each spot. Tap × to take someone off.' %></p>
+            <ul class="pick-list" data-role="picks-list"></ul>
+          </fieldset>
+
+          <fieldset class="signup-fieldset">
             <legend>Your contact info</legend>
+            <p class="muted small">So we can reach you — you don’t have to <%= isPotluck ? 'bring an item' : 'fill a spot' %> yourself.</p>
             <div class="form-grid two">
               <div class="form-group">
                 <label for="signup-name">Your name</label>
@@ -166,12 +174,6 @@
               </div>
             </div>
             <p class="muted small">We’ll email a confirmation with a link to see, change, or add to your sign-up.</p>
-          </fieldset>
-
-          <fieldset class="signup-fieldset">
-            <legend>Who’s filling each <%= spotWord %>? <span class="selection-count-badge" data-role="picks-count"></span></legend>
-            <p class="muted small">You don’t have to fill a spot yourself — your name and email are just so we can reach you. For family or friends, choose “Someone else…” and type their name. One person can’t take the same <%= spotWord %> twice<%= (!isPotluck && !event.allow_overlap) ? ' or two spots at the same time' : '' %>.</p>
-            <ul class="pick-list" data-role="picks-list"></ul>
           </fieldset>
 
           <div class="card-actions">

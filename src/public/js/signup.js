@@ -50,6 +50,7 @@
       id,
       el,
       label: el.getAttribute('data-label') || '',
+      title: el.getAttribute('data-title') || '',
       stationName: el.getAttribute('data-station-name') || '',
       start: parseLocal(el.getAttribute('data-start')),
       end: parseLocal(el.getAttribute('data-end')),
@@ -99,17 +100,19 @@
   } else {
     people.push({ key: 'me', name: '', isRegistrant: true });
   }
-  // Who new "Sign up" presses go to (the "Signing up:" chooser).
-  let preferredKey = people.length ? people[0].key : null;
-
-  // Drop "someone else" people who no longer fill any spot, so a removed
-  // person isn't silently reused for the next pick.
-  function prunePeople() {
-    for (let i = people.length - 1; i >= 0; i -= 1) {
-      const p = people[i];
-      if (p.isRegistrant || p.id || p.key === preferredKey) continue;
-      if (!picks.some(k => k.personKey === p.key)) people.splice(i, 1);
-    }
+  // The group is everyone who can fill spots. "Me" can be left out when
+  // someone is only signing up others (e.g. their kids).
+  let meComing = true;
+  function isActive(p) { return !p.isRegistrant || meComing; }
+  function activePeople() { return people.filter(isActive); }
+  function removePerson(key) {
+    const idx = people.findIndex(p => p.key === key);
+    if (idx >= 0) people.splice(idx, 1);
+  }
+  function spotsFor(key) { return picks.filter(p => p.personKey === key).length; }
+  function joinNames(names) {
+    if (names.length <= 1) return names.join('');
+    return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
   }
 
   // Returns null, { type: 'same' }, or { type: 'overlap', stationName }.
@@ -145,17 +148,12 @@
     return slot.capacity - used;
   }
 
-  // The chosen person if free; otherwise someone already filling other spots.
-  // Never falls back to "Me" unless "Me" is the chosen person or already has spots.
+  function freePeople(blockId) {
+    return activePeople().filter(p => !conflictFor(p.key, blockId, null));
+  }
   function firstAvailablePerson(blockId) {
-    const isFree = p => p && !conflictFor(p.key, blockId, null);
-    const preferred = preferredKey ? personByKey(preferredKey) : null;
-    if (isFree(preferred)) return preferred.key;
-    const active = people.find(p => picks.some(k => k.personKey === p.key) && isFree(p));
-    if (active) return active.key;
-    if (preferred) return '';
-    const any = people.find(isFree);
-    return any ? any.key : '';
+    const free = freePeople(blockId);
+    return free.length ? free[0].key : '';
   }
 
   function addPick(blockId, personKey, dishName, opts) {
@@ -200,117 +198,180 @@
       return (sa ? sa.label : '').localeCompare(sb ? sb.label : '') || a.uid - b.uid;
     });
 
+    const groups = [];
     ordered.forEach(pick => {
-      const slot = slots.get(pick.blockId);
-      const li = document.createElement('li');
-      li.className = 'pick';
-      li.dataset.uid = String(pick.uid);
-      li.dataset.blockId = String(pick.blockId);
-
-      const what = document.createElement('div');
-      what.className = 'pick__what';
-      const title = document.createElement('strong');
-      title.textContent = slot ? slot.label : `${spotWord} #${pick.blockId}`;
-      what.appendChild(title);
-      if (isManage && !pick.saved) {
-        const tag = document.createElement('span');
-        tag.className = 'pick__tag';
-        tag.textContent = 'New';
-        what.appendChild(tag);
-      }
-      li.appendChild(what);
-
-      const who = document.createElement('div');
-      who.className = 'pick__who';
-      const whoLabel = document.createElement('label');
-      whoLabel.className = 'pick__label';
-      whoLabel.setAttribute('for', `pick-who-${pick.uid}`);
-      whoLabel.textContent = 'Who';
-      const select = document.createElement('select');
-      select.id = `pick-who-${pick.uid}`;
-      if (!pick.personKey) {
-        const placeholder = document.createElement('option');
-        placeholder.value = '';
-        placeholder.textContent = 'Choose who…';
-        placeholder.selected = true;
-        placeholder.disabled = true;
-        select.appendChild(placeholder);
-      }
-      people.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.key;
-        const reason = conflictFor(p.key, pick.blockId, pick.uid);
-        opt.textContent = reason ? `${personLabel(p)} — ${conflictOptionText(reason)}` : personLabel(p);
-        if (reason && p.key !== pick.personKey) opt.disabled = true;
-        if (p.key === pick.personKey) opt.selected = true;
-        select.appendChild(opt);
-      });
-      const other = document.createElement('option');
-      other.value = NEW_PERSON;
-      other.textContent = 'Someone else…';
-      select.appendChild(other);
-      select.addEventListener('change', () => {
-        if (select.value === NEW_PERSON) {
-          showNewPersonInput(who, select, pick);
-          return;
-        }
-        pick.personKey = select.value;
-        refresh();
-      });
-      who.appendChild(whoLabel);
-      who.appendChild(select);
-      li.appendChild(who);
-
-      if (isPotluck) {
-        const dish = document.createElement('div');
-        dish.className = 'pick__dish';
-        const dishLabel = document.createElement('label');
-        dishLabel.className = 'pick__label';
-        dishLabel.setAttribute('for', `pick-dish-${pick.uid}`);
-        dishLabel.textContent = 'Dish';
-        const dishInput = document.createElement('input');
-        dishInput.type = 'text';
-        dishInput.id = `pick-dish-${pick.uid}`;
-        dishInput.maxLength = 200;
-        dishInput.placeholder = 'What are you bringing?';
-        dishInput.value = pick.dishName || '';
-        dishInput.addEventListener('input', () => {
-          pick.dishName = dishInput.value;
-          dishInput.classList.remove('input-error');
-          updatePayload();
-          updateDirty();
-        });
-        dish.appendChild(dishLabel);
-        dish.appendChild(dishInput);
-        li.appendChild(dish);
-      }
-
-      const remove = document.createElement('button');
-      remove.type = 'button';
-      remove.className = 'selected-slot-remove pick__remove';
-      remove.textContent = 'Remove';
-      remove.setAttribute('aria-label', `Remove ${slot ? slot.label : spotWord}`);
-      remove.addEventListener('click', () => {
-        removePick(pick.uid);
-        refresh();
-      });
-      li.appendChild(remove);
-
-      const problem = pickProblem(pick);
-      if (problem) {
-        li.classList.add('has-error');
-        const err = document.createElement('p');
-        err.className = 'pick__error';
-        err.textContent = problem;
-        li.appendChild(err);
-      }
-
-      picksList.appendChild(li);
+      const last = groups[groups.length - 1];
+      if (last && last.blockId === pick.blockId) last.picks.push(pick);
+      else groups.push({ blockId: pick.blockId, picks: [pick] });
     });
+    groups.forEach(group => picksList.appendChild(renderPickGroup(group)));
 
     if (picksEmpty) picksEmpty.hidden = picks.length > 0;
     if (!isManage) form.hidden = picks.length === 0;
     if (picksCount) picksCount.textContent = picks.length ? `(${picks.length})` : '';
+  }
+
+  // One compact block per spot; people who are fine show as removable chips.
+  function renderPickGroup(group) {
+    const slot = slots.get(group.blockId);
+    const li = document.createElement('li');
+    li.className = 'pick-group';
+    li.dataset.blockId = String(group.blockId);
+
+    const head = document.createElement('div');
+    head.className = 'pick-group__head';
+    const title = document.createElement('strong');
+    title.className = 'pick-group__title';
+    title.textContent = slot ? slot.stationName : `${spotWord} #${group.blockId}`;
+    head.appendChild(title);
+    if (slot && slot.title) {
+      const when = document.createElement('span');
+      when.className = 'pick-group__when';
+      when.textContent = slot.title;
+      head.appendChild(when);
+    }
+    li.appendChild(head);
+
+    const chips = document.createElement('div');
+    chips.className = 'pick-chips';
+    group.picks.forEach(pick => {
+      if (isPotluck || pickProblem(pick)) {
+        li.appendChild(buildPickRow(pick));
+        return;
+      }
+      chips.appendChild(buildPickChip(pick, slot));
+    });
+    if (chips.childNodes.length) li.insertBefore(chips, head.nextSibling);
+    return li;
+  }
+
+  function buildPickChip(pick, slot) {
+    const person = personByKey(pick.personKey);
+    const chip = document.createElement('span');
+    chip.className = 'pick-chip';
+    chip.dataset.uid = String(pick.uid);
+    const name = document.createElement('span');
+    name.textContent = personLabel(person);
+    chip.appendChild(name);
+    if (isManage && !pick.saved) {
+      const tag = document.createElement('span');
+      tag.className = 'pick__tag';
+      tag.textContent = 'New';
+      chip.appendChild(tag);
+    }
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'pick-chip__remove';
+    remove.textContent = '×';
+    remove.setAttribute('aria-label', `Remove ${personLabel(person)} from ${slot ? slot.label : spotWord}`);
+    remove.addEventListener('click', () => {
+      removePick(pick.uid);
+      refresh();
+    });
+    chip.appendChild(remove);
+    return chip;
+  }
+
+  // Full row with a "Who" dropdown: for picks that need attention (no one
+  // chosen, a clash) and for Food Prep items, which need a dish name.
+  function buildPickRow(pick) {
+    const slot = slots.get(pick.blockId);
+    const row = document.createElement('div');
+    row.className = 'pick';
+    row.dataset.uid = String(pick.uid);
+    row.dataset.blockId = String(pick.blockId);
+
+    const who = document.createElement('div');
+    who.className = 'pick__who';
+    const whoLabel = document.createElement('label');
+    whoLabel.className = 'pick__label';
+    whoLabel.setAttribute('for', `pick-who-${pick.uid}`);
+    whoLabel.textContent = 'Who';
+    if (isManage && !pick.saved) {
+      const tag = document.createElement('span');
+      tag.className = 'pick__tag';
+      tag.textContent = 'New';
+      whoLabel.appendChild(tag);
+    }
+    const select = document.createElement('select');
+    select.id = `pick-who-${pick.uid}`;
+    if (!pick.personKey) {
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = 'Choose who…';
+      placeholder.selected = true;
+      placeholder.disabled = true;
+      select.appendChild(placeholder);
+    }
+    people.filter(p => isActive(p) || p.key === pick.personKey).forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.key;
+      const reason = conflictFor(p.key, pick.blockId, pick.uid);
+      opt.textContent = reason ? `${personLabel(p)} — ${conflictOptionText(reason)}` : personLabel(p);
+      if (reason && p.key !== pick.personKey) opt.disabled = true;
+      if (p.key === pick.personKey) opt.selected = true;
+      select.appendChild(opt);
+    });
+    const other = document.createElement('option');
+    other.value = NEW_PERSON;
+    other.textContent = 'Someone else…';
+    select.appendChild(other);
+    select.addEventListener('change', () => {
+      if (select.value === NEW_PERSON) {
+        showNewPersonInput(who, select, pick);
+        return;
+      }
+      pick.personKey = select.value;
+      refresh();
+    });
+    who.appendChild(whoLabel);
+    who.appendChild(select);
+    row.appendChild(who);
+
+    if (isPotluck) {
+      const dish = document.createElement('div');
+      dish.className = 'pick__dish';
+      const dishLabel = document.createElement('label');
+      dishLabel.className = 'pick__label';
+      dishLabel.setAttribute('for', `pick-dish-${pick.uid}`);
+      dishLabel.textContent = 'Dish';
+      const dishInput = document.createElement('input');
+      dishInput.type = 'text';
+      dishInput.id = `pick-dish-${pick.uid}`;
+      dishInput.maxLength = 200;
+      dishInput.placeholder = 'What are you bringing?';
+      dishInput.value = pick.dishName || '';
+      dishInput.addEventListener('input', () => {
+        pick.dishName = dishInput.value;
+        dishInput.classList.remove('input-error');
+        updatePayload();
+        updateDirty();
+      });
+      dish.appendChild(dishLabel);
+      dish.appendChild(dishInput);
+      row.appendChild(dish);
+    }
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'selected-slot-remove pick__remove';
+    remove.textContent = 'Remove';
+    remove.setAttribute('aria-label', `Remove ${slot ? slot.label : spotWord}`);
+    remove.addEventListener('click', () => {
+      removePick(pick.uid);
+      refresh();
+    });
+    row.appendChild(remove);
+
+    const problem = pickProblem(pick);
+    if (problem) {
+      row.classList.add('has-error');
+      const err = document.createElement('p');
+      err.className = 'pick__error';
+      err.textContent = problem;
+      row.appendChild(err);
+    }
+    return row;
   }
 
   function showNewPersonInput(container, select, pick) {
@@ -379,7 +440,7 @@
       if (spotsText) {
         spotsText.textContent = full
           ? (here.length ? 'Full (including your picks)' : 'Full — thank you!')
-          : `${left} of ${slot.capacity} ${isPotluck ? 'still needed' : (slot.capacity === 1 ? 'spot open' : 'spots open')}`;
+          : `${left} ${isPotluck ? 'still needed' : (left === 1 ? 'spot left' : 'spots left')}`;
       }
       const fill = el.querySelector('.spots-bar__fill');
       if (fill && slot.capacity > 0) {
@@ -402,7 +463,7 @@
 
       const note = el.querySelector('[data-role="note"]');
       if (note && checkOverlap) {
-        const busy = (full && !here.length) ? [] : people
+        const busy = (full && !here.length) ? [] : activePeople()
           .filter(p => !here.some(h => h.personKey === p.key))
           .map(p => {
             const r = conflictFor(p.key, slot.id, null);
@@ -415,7 +476,7 @@
 
       const addBtn = el.querySelector('[data-role="add"]');
       if (addBtn) {
-        const everyoneBusy = !full && !firstAvailablePerson(slot.id);
+        const everyoneBusy = !full && !freePeople(slot.id).length;
         addBtn.hidden = full || inlineOpen.has(slot.id);
         addBtn.textContent = everyoneBusy ? '+ Someone else' : (here.length ? '+ Add another person' : 'Sign up');
         addBtn.classList.toggle('btn-primary', !here.length && !everyoneBusy);
@@ -526,78 +587,114 @@
   if (onlyOpen) onlyOpen.addEventListener('change', applyOnlyOpen);
   if (viewMode) viewMode.addEventListener('change', applyViewMode);
 
-  // ---- "Signing up:" chooser ----------------------------------------------
+  // ---- "Who's coming?" group row -----------------------------------------
   const toolbar = positionsRoot.querySelector('.positions__toolbar');
-  let chooser = null;
-  let chooserSelect = null;
+  let groupChips = null;
   if (toolbar) {
-    chooser = document.createElement('div');
-    chooser.className = 'positions__who';
-    const label = document.createElement('label');
-    label.setAttribute('for', 'signup-who');
-    label.textContent = 'Signing up:';
-    chooserSelect = document.createElement('select');
-    chooserSelect.id = 'signup-who';
+    const row = document.createElement('div');
+    row.className = 'positions__who';
+    const title = document.createElement('span');
+    title.className = 'positions__who-label';
+    title.id = 'group-label';
+    title.textContent = 'Who’s coming?';
+    groupChips = document.createElement('div');
+    groupChips.className = 'group-chips';
+    groupChips.setAttribute('role', 'group');
+    groupChips.setAttribute('aria-labelledby', 'group-label');
     const hint = document.createElement('span');
     hint.className = 'positions__who-hint';
     hint.textContent = isManage
-      ? `Each “Sign up” goes to this person.`
-      : `Each “Sign up” goes to this person. Not coming yourself? Choose “Someone else…”.`;
-    chooser.appendChild(label);
-    chooser.appendChild(chooserSelect);
-    chooser.appendChild(hint);
-    toolbar.insertBefore(chooser, toolbar.firstChild);
-    chooserSelect.addEventListener('change', () => {
-      if (chooserSelect.value === NEW_PERSON) { openChooserName(); return; }
-      preferredKey = chooserSelect.value || null;
-      refresh();
-    });
+      ? 'Add anyone else who’s helping, then sign them up for spots below.'
+      : 'Add family or friends you’re signing up. Tap “Me” to leave yourself out.';
+    row.appendChild(title);
+    row.appendChild(groupChips);
+    row.appendChild(hint);
+    toolbar.insertBefore(row, toolbar.firstChild);
   }
 
-  function renderChooser() {
-    if (!chooserSelect || chooser.querySelector('.positions__who-new')) return;
-    chooserSelect.textContent = '';
+  function renderGroup() {
+    if (!groupChips || groupChips.querySelector('.group-chips__new')) return;
+    groupChips.textContent = '';
     people.forEach(p => {
-      const opt = document.createElement('option');
-      opt.value = p.key;
-      opt.textContent = personLabel(p);
-      if (p.key === preferredKey) opt.selected = true;
-      chooserSelect.appendChild(opt);
+      if (p.isRegistrant) {
+        const me = document.createElement('button');
+        me.type = 'button';
+        me.className = 'group-chip group-chip--me';
+        me.setAttribute('aria-pressed', meComing ? 'true' : 'false');
+        me.textContent = meComing ? `✓ ${personLabel(p)}` : 'Me (not coming)';
+        me.addEventListener('click', () => {
+          const count = spotsFor(p.key);
+          if (meComing && count) {
+            toast(`You have ${count} ${count === 1 ? spotWord : spotWord + 's'}. Remove ${count === 1 ? 'it' : 'them'} or change who’s filling ${count === 1 ? 'it' : 'them'} first.`);
+            return;
+          }
+          meComing = !meComing;
+          closePanels();
+          refresh();
+        });
+        groupChips.appendChild(me);
+        return;
+      }
+      const chip = document.createElement('span');
+      chip.className = 'group-chip';
+      const name = document.createElement('span');
+      name.textContent = p.name;
+      chip.appendChild(name);
+      if (!p.id) {
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'group-chip__remove';
+        remove.textContent = '×';
+        remove.setAttribute('aria-label', `Remove ${p.name} from your group`);
+        remove.addEventListener('click', () => {
+          const count = spotsFor(p.key);
+          if (count) {
+            toast(`${p.name} has ${count} ${count === 1 ? spotWord : spotWord + 's'}. Remove ${count === 1 ? 'it' : 'them'} first.`);
+            return;
+          }
+          removePerson(p.key);
+          closePanels();
+          refresh();
+        });
+        chip.appendChild(remove);
+      }
+      groupChips.appendChild(chip);
     });
-    const other = document.createElement('option');
-    other.value = NEW_PERSON;
-    other.textContent = 'Someone else…';
-    chooserSelect.appendChild(other);
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'group-chip group-chip--add';
+    add.textContent = '+ Add person';
+    add.addEventListener('click', () => openGroupName(add));
+    groupChips.appendChild(add);
   }
 
-  function openChooserName() {
-    chooserSelect.hidden = true;
+  function openGroupName(addBtn) {
+    addBtn.hidden = true;
     const wrap = document.createElement('div');
-    wrap.className = 'positions__who-new';
+    wrap.className = 'group-chips__new';
     const input = document.createElement('input');
     input.type = 'text';
     input.maxLength = 100;
     input.placeholder = 'Their full name';
-    input.setAttribute('aria-label', 'Name of the person you are signing up');
+    input.setAttribute('aria-label', 'Name of the person to add to your group');
     const add = document.createElement('button');
     add.type = 'button';
     add.className = 'btn btn-primary small';
-    add.textContent = 'Use';
+    add.textContent = 'Add';
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'btn btn-link small';
     cancel.textContent = 'Cancel';
     const close = () => {
       wrap.remove();
-      chooserSelect.hidden = false;
       refresh();
     };
     const commit = () => {
       const person = addPerson(input.value);
       if (!person) { input.focus({ preventScroll: true }); return; }
-      preferredKey = person.key;
+      if (person.isRegistrant) meComing = true;
       close();
-      toast(`Now signing up ${personLabel(person)}. Press “Sign up” on the spots for them.`);
+      toast(`${personLabel(person)} is in your group. Press “Sign up” on the ${spotWord}s for them.`);
     };
     add.addEventListener('click', commit);
     cancel.addEventListener('click', close);
@@ -608,7 +705,7 @@
     wrap.appendChild(input);
     wrap.appendChild(add);
     wrap.appendChild(cancel);
-    chooserSelect.insertAdjacentElement('afterend', wrap);
+    groupChips.appendChild(wrap);
     input.focus({ preventScroll: true });
   }
 
@@ -707,7 +804,7 @@
       sessionStorage.setItem(draftKey, JSON.stringify({
         people: people.filter(p => !p.isRegistrant).map(p => ({ key: p.key, name: p.name })),
         picks: picks.map(p => ({ blockId: p.blockId, personKey: p.personKey, dishName: p.dishName || '' })),
-        preferredKey,
+        meComing,
         contact: {
           name: nameInput ? nameInput.value : '',
           email: emailInput ? emailInput.value : '',
@@ -739,13 +836,12 @@
       if (key && conflictFor(key, blockId, null)) return;
       if (addPick(blockId, key, p.dishName || '')) restored += 1;
     });
-    if (data.preferredKey && keyMap.has(data.preferredKey)) preferredKey = keyMap.get(data.preferredKey);
+    meComing = data.meComing !== false || spotsFor('me') > 0;
     return restored;
   }
 
   function refresh() {
-    prunePeople();
-    renderChooser();
+    renderGroup();
     renderPicks();
     renderSlots();
     updatePayload();
@@ -765,35 +861,88 @@
       refresh();
       return;
     }
-    if (!firstAvailablePerson(blockId)) {
-      openInlineName(slot);
+    const free = freePeople(blockId);
+    if (free.length !== 1) {
+      openSlotPanel(slot);
       return;
     }
-    const pick = addPick(blockId);
+    const pick = addPick(blockId, free[0].key);
     if (!pick) return;
     refresh();
-    const person = personByKey(pick.personKey);
-    toast(person
-      ? `Added ${slot.label} for ${personLabel(person)}.`
-      : `Added ${slot.label}. Choose who’s filling it below.`);
+    toast(`Added ${slot.label} for ${personLabel(free[0])}.`);
   });
 
-  // Everyone in the group is busy for this spot: ask for a new name right in
-  // the card so the page doesn't jump away from the list.
-  function openInlineName(slot) {
-    const action = slot.el.querySelector('.slot__action');
-    if (!action) return;
-    const existing = action.querySelector('.slot__new-person input');
-    if (existing) { existing.focus({ preventScroll: true }); return; }
+  function closePanels() {
+    positionsRoot.querySelectorAll('.slot__chooser').forEach(el => el.remove());
+    inlineOpen.clear();
+  }
 
+  // "Who's taking this?" panel inside the spot card: tick people from the
+  // group (busy ones greyed out) and/or type a new name. Opens in place so
+  // the page doesn't jump away from the list.
+  function openSlotPanel(slot) {
+    const existingPanel = slot.el.querySelector('.slot__chooser');
+    if (existingPanel) {
+      const first = existingPanel.querySelector('input:not([disabled])');
+      if (first) first.focus({ preventScroll: true });
+      return;
+    }
     inlineOpen.add(slot.id);
-    const wrap = document.createElement('div');
-    wrap.className = 'slot__new-person';
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.maxLength = 100;
-    input.placeholder = 'Their full name';
-    input.setAttribute('aria-label', `Name of the person filling ${slot.label}`);
+
+    const panel = document.createElement('div');
+    panel.className = 'slot__chooser';
+    panel.setAttribute('role', 'group');
+    panel.setAttribute('aria-label', `Who’s taking ${slot.label}?`);
+    const title = document.createElement('p');
+    title.className = 'slot__chooser-title';
+    title.textContent = 'Who’s taking this?';
+    panel.appendChild(title);
+
+    const group = activePeople();
+    const boxes = [];
+    if (group.length) {
+      const list = document.createElement('div');
+      list.className = 'slot__chooser-people';
+      group.forEach(p => {
+        const conflict = conflictFor(p.key, slot.id, null);
+        const label = document.createElement('label');
+        label.className = `slot__chooser-person${conflict ? ' is-disabled' : ''}`;
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.value = p.key;
+        box.disabled = !!conflict;
+        box.checked = !!conflict && conflict.type === 'same';
+        boxes.push(box);
+        const name = document.createElement('span');
+        name.textContent = personLabel(p);
+        label.appendChild(box);
+        label.appendChild(name);
+        if (conflict) {
+          const why = document.createElement('span');
+          why.className = 'slot__chooser-why';
+          why.textContent = conflict.type === 'same' ? 'already signed up' : `busy at ${conflict.stationName}`;
+          label.appendChild(why);
+        }
+        list.appendChild(label);
+      });
+      panel.appendChild(list);
+    }
+
+    const newInput = document.createElement('input');
+    newInput.type = 'text';
+    newInput.maxLength = 100;
+    newInput.className = 'slot__chooser-new';
+    newInput.placeholder = group.length ? 'Someone else? Type their full name' : 'Their full name';
+    newInput.setAttribute('aria-label', `Name of someone else taking ${slot.label}`);
+    panel.appendChild(newInput);
+
+    const err = document.createElement('p');
+    err.className = 'slot__chooser-error';
+    err.hidden = true;
+    panel.appendChild(err);
+
+    const actions = document.createElement('div');
+    actions.className = 'slot__chooser-actions';
     const add = document.createElement('button');
     add.type = 'button';
     add.className = 'btn btn-primary small';
@@ -802,45 +951,55 @@
     cancel.type = 'button';
     cancel.className = 'btn btn-link small';
     cancel.textContent = 'Cancel';
-    const err = document.createElement('p');
-    err.className = 'slot__new-person-error';
-    err.hidden = true;
+    actions.appendChild(add);
+    actions.appendChild(cancel);
+    panel.appendChild(actions);
 
+    const showErr = (message, focusEl) => {
+      err.textContent = message;
+      err.hidden = false;
+      if (focusEl) focusEl.focus({ preventScroll: true });
+    };
     const close = () => {
+      panel.remove();
       inlineOpen.delete(slot.id);
-      wrap.remove();
       refresh();
     };
     const commit = () => {
-      const name = input.value.trim();
-      if (!name) { input.focus({ preventScroll: true }); return; }
-      const person = addPerson(name);
-      const conflict = person ? conflictFor(person.key, slot.id, null) : null;
-      if (!person || conflict) {
-        err.textContent = person ? conflictSentence(person, conflict) : 'Please type a name.';
-        err.hidden = false;
-        input.focus({ preventScroll: true });
-        return;
+      const keys = boxes.filter(b => b.checked && !b.disabled).map(b => b.value);
+      const typed = newInput.value.trim();
+      if (typed) {
+        const person = addPerson(typed);
+        if (!person) return showErr('Please type a name.', newInput);
+        const conflict = conflictFor(person.key, slot.id, null);
+        if (conflict) return showErr(conflictSentence(person, conflict), newInput);
+        if (person.isRegistrant) meComing = true;
+        if (!keys.includes(person.key)) keys.push(person.key);
       }
-      const pick = addPick(slot.id, person.key);
+      if (!keys.length) return showErr('Tick someone, or type a name.', boxes.find(b => !b.disabled) || newInput);
+      const left = remaining(slot.id);
+      if (keys.length > left) {
+        return showErr(`Only ${left} ${left === 1 ? spotWord : spotWord + 's'} left here — tick fewer people.`);
+      }
+      keys.forEach(k => addPick(slot.id, k));
+      const names = keys.map(k => personLabel(personByKey(k)));
       close();
-      if (pick) toast(`Added ${slot.label} for ${personLabel(person)}.`);
+      toast(`Added ${slot.label} for ${joinNames(names)}.`);
     };
     add.addEventListener('click', commit);
     cancel.addEventListener('click', close);
-    input.addEventListener('keydown', (e) => {
+    newInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    });
+    panel.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { e.preventDefault(); close(); }
     });
-    input.addEventListener('input', () => { err.hidden = true; });
+    panel.addEventListener('input', () => { err.hidden = true; });
 
-    wrap.appendChild(input);
-    wrap.appendChild(add);
-    wrap.appendChild(cancel);
-    wrap.appendChild(err);
-    action.insertBefore(wrap, action.firstChild);
+    slot.el.appendChild(panel);
     refresh();
-    input.focus({ preventScroll: true });
+    const first = boxes.find(b => !b.disabled) || newInput;
+    first.focus({ preventScroll: true });
   }
 
   // ---- Validation & submit ----------------------------------------------
