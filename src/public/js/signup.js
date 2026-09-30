@@ -735,6 +735,81 @@
     return r.top < window.innerHeight && r.bottom > 0;
   }
 
+  // Wide screens pin Step 2 beside the list (CSS); narrower ones open it as a
+  // bottom sheet from the picks bar. Keep the width in sync with style.css.
+  const wideQuery = !isManage && window.matchMedia ? window.matchMedia('(min-width: 1100px)') : null;
+  const sheetClose = document.querySelector('[data-role="sheet-close"]');
+  const stepHeading = document.getElementById('signup-step-heading');
+  let sheetOpen = false;
+  let sheetBackdrop = null;
+  let sheetReturnFocus = null;
+  let sheetInert = [];
+  let sheetScrollY = 0;
+
+  function isWide() { return !!(wideQuery && wideQuery.matches); }
+
+  function openSheet() {
+    if (sheetOpen || !stepSection) return;
+    sheetOpen = true;
+    sheetReturnFocus = document.activeElement;
+    document.querySelectorAll('.toast[data-signup-toast]').forEach(el => el.remove());
+    sheetBackdrop = document.createElement('div');
+    sheetBackdrop.className = 'signup-sheet-backdrop';
+    sheetBackdrop.addEventListener('click', closeSheet);
+    document.body.appendChild(sheetBackdrop);
+    stepSection.classList.add('is-sheet');
+    stepSection.setAttribute('role', 'dialog');
+    stepSection.setAttribute('aria-modal', 'true');
+    if (sheetClose) sheetClose.hidden = false;
+    sheetScrollY = window.scrollY;
+    document.documentElement.style.setProperty('--sheet-lock-top', `-${sheetScrollY}px`);
+    document.documentElement.classList.add('has-sheet');
+    // Make everything outside the sheet unreachable by keyboard / screen reader.
+    for (let el = stepSection; el.parentElement && el !== document.body; el = el.parentElement) {
+      Array.from(el.parentElement.children).forEach(sib => {
+        if (sib === el || sib === sheetBackdrop || sib.id === 'toast-root' || sib.inert) return;
+        sib.inert = true;
+        sheetInert.push(sib);
+      });
+    }
+    stepSection.scrollTop = 0;
+    updateBar();
+    if (stepHeading) stepHeading.focus({ preventScroll: true });
+  }
+
+  function closeSheet() {
+    if (!sheetOpen) return;
+    sheetOpen = false;
+    stepSection.classList.remove('is-sheet');
+    stepSection.removeAttribute('role');
+    stepSection.removeAttribute('aria-modal');
+    if (sheetClose) sheetClose.hidden = true;
+    document.documentElement.classList.remove('has-sheet');
+    document.documentElement.style.removeProperty('--sheet-lock-top');
+    window.scrollTo({ top: sheetScrollY, behavior: 'instant' });
+    sheetInert.forEach(el => { el.inert = false; });
+    sheetInert = [];
+    if (sheetBackdrop) { sheetBackdrop.remove(); sheetBackdrop = null; }
+    updateBar();
+    const back = sheetReturnFocus && sheetReturnFocus !== document.body && document.contains(sheetReturnFocus) && sheetReturnFocus.offsetParent
+      ? sheetReturnFocus
+      : (bar && !bar.hidden ? barGo : null);
+    if (back) back.focus({ preventScroll: true });
+    sheetReturnFocus = null;
+  }
+
+  if (sheetClose) sheetClose.addEventListener('click', closeSheet);
+  if (stepSection && !isManage) {
+    stepSection.addEventListener('keydown', (e) => {
+      if (sheetOpen && e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); closeSheet(); }
+    });
+  }
+  if (wideQuery) {
+    const onWidthChange = () => { if (isWide()) closeSheet(); updateBar(); };
+    if (wideQuery.addEventListener) wideQuery.addEventListener('change', onWidthChange);
+    else if (wideQuery.addListener) wideQuery.addListener(onWidthChange);
+  }
+
   function updateBar() {
     if (!bar) return;
     let show = false;
@@ -742,13 +817,14 @@
       show = isDirty() && !isInView(form);
       if (barText) barText.textContent = 'You have unsaved changes';
     } else {
-      show = picks.length > 0 && !isInView(form);
+      show = picks.length > 0 && !sheetOpen && !isWide() && !isInView(form);
       if (barText) barText.textContent = `${picks.length} ${picks.length === 1 ? spotWord : spotWord + 's'} picked`;
     }
     bar.hidden = !show;
   }
   if (barGo) {
     barGo.addEventListener('click', () => {
+      if (!isManage && stepSection) { openSheet(); return; }
       const target = stepSection || form;
       target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
@@ -1021,7 +1097,7 @@
 
   function validate() {
     if (!isManage) {
-      if (!picks.length) return { message: `Tap “Sign up” on at least one ${spotWord} above.` };
+      if (!picks.length) return { message: `Tap “Sign up” on at least one ${spotWord} first.` };
       const name = registrantName();
       if (!name) {
         nameInput.classList.add('input-error');

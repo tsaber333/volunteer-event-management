@@ -126,6 +126,7 @@
 <% } %>
 
 <% if (hasSlots) { %>
+<div class="signup-layout<%= mine ? '' : ' signup-layout--with-panel' %>">
   <section class="page-section page-section--compact page-shell" id="positions" aria-labelledby="positions-heading">
     <h3 id="positions-heading" class="step-heading">
       <%= mine ? 'What’s still needed' : (isPotluck ? 'Step 1: Choose what you’d like to bring' : 'Step 1: Choose where you’d like to help') %>
@@ -140,10 +141,13 @@
   </section>
 
   <% if (!mine) { %>
-    <section class="page-section page-shell" id="signup-step" aria-labelledby="signup-step-heading">
-      <h3 id="signup-step-heading" class="step-heading">Step 2: Review and confirm</h3>
+    <section class="page-section page-shell signup-step" id="signup-step" aria-labelledby="signup-step-heading">
+      <div class="signup-step__head">
+        <h3 id="signup-step-heading" class="step-heading" tabindex="-1">Step 2: Review and confirm</h3>
+        <button type="button" class="btn btn-outline small signup-step__close" data-role="sheet-close" hidden>Back to list</button>
+      </div>
       <article class="card card--plain signup-panel">
-        <p class="muted" data-role="picks-empty">Tap “Sign up” on any <%= spotWord %> above. Your picks will show up here.</p>
+        <p class="muted" data-role="picks-empty">Tap “Sign up” on any <%= spotWord %>. Your picks will show up here.</p>
         <form id="signup-form" action="/signup" method="POST" novalidate data-role="picks-form" hidden>
           <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
           <input type="hidden" name="eventId" value="<%= event.event_id %>">
@@ -196,6 +200,7 @@
       draft: draftReg
     }) %></script>
   <% } %>
+</div>
 <% } else { %>
   <section class="page-section page-shell">
     <article class="card card--plain empty-state">
