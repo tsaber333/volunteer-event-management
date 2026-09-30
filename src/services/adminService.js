@@ -960,7 +960,8 @@ module.exports = {
   getStationDetailsForAdmin,
   /**
    * Create a new event by copying the structure of an existing one.
-   * Copies: name (with "Copy of"), description, dates, stations, time blocks.
+   * Copies: name (with "Copy of"), description, dates, event type, overlap
+   * setting, stations, time blocks / Food Prep items (title and servings).
    * Does NOT copy: publish state (always draft), reservations.
    */
   copyEvent: (sourceEventId) => {
@@ -971,9 +972,10 @@ module.exports = {
     // Ensure canonical strings
     const startTxt = src.date_start;
     const endTxt = src.date_end;
+    const mode = String(src.signup_mode || '').toLowerCase() === 'potluck' ? 'potluck' : 'schedule';
 
     // Create new event (is_published defaults to 0 in DAL)
-    const evRes = dal.admin.createEvent(name, src.description || '', startTxt, endTxt);
+    const evRes = dal.admin.createEvent(name, src.description || '', startTxt, endTxt, mode);
     const newEventId = evRes.lastInsertRowid;
     if (src.allow_overlap) dal.admin.updateEvent(newEventId, { allow_overlap: true });
 
@@ -983,7 +985,12 @@ module.exports = {
       const newStationId = sRes.lastInsertRowid;
       const blocks = Array.isArray(st.time_blocks) ? st.time_blocks : [];
       blocks.forEach(b => {
-        dal.admin.createTimeBlock(newStationId, b.start_time, b.end_time, b.capacity_needed);
+        const bRes = dal.admin.createTimeBlock(newStationId, b.start_time, b.end_time, b.capacity_needed);
+        const patch = {};
+        if (b.title) patch.title = b.title;
+        if (b.servings_min != null) patch.servings_min = b.servings_min;
+        if (b.servings_max != null) patch.servings_max = b.servings_max;
+        if (Object.keys(patch).length) dal.admin.updateTimeBlock(bRes.lastInsertRowid, patch);
       });
     });
 

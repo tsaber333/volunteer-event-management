@@ -132,7 +132,7 @@
             </span>
             <span class="dropdown__link-text">Open needs export</span>
           </a>
-          <form action="/admin/event/<%= event.event_id %>/copy" method="POST" class="inline-form dropdown__item js-confirm" data-confirm="Create a copy of this event (stations and time blocks only)?" data-confirm-cta="Copy">
+          <form action="/admin/event/<%= event.event_id %>/copy" method="POST" class="inline-form dropdown__item js-confirm" data-confirm="Create a draft copy of this event? Stations, time slots and Food Prep items are copied; sign-ups are not." data-confirm-cta="Copy">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
             <button type="submit" class="dropdown__link">
               <span class="dropdown__icon-badge dropdown__icon-badge--primary">
