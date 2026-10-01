@@ -3,7 +3,8 @@
 // ("manage" mode). Positions are shown first; each "Sign up" adds a pick, and
 // the picks panel collects who fills each spot. Rules mirrored from the server:
 // one person can't hold the same slot/item twice, and can't hold overlapping
-// time slots unless the event allows it. CSP-safe: no inline handlers.
+// time slots unless the event allows it. View controls live in positions.js.
+// CSP-safe: no inline handlers.
 (function () {
   'use strict';
 
@@ -517,7 +518,7 @@
       el.classList.toggle('is-mine', here.length > 0);
     });
     renderSummary();
-    applyOnlyOpen();
+    positionsRoot.dispatchEvent(new CustomEvent('positions:change'));
   }
 
   function renderSummary() {
@@ -540,52 +541,6 @@
       summaryEl.textContent = `Every ${spotWord} is filled — thank you!`;
     }
   }
-
-  // ---- View controls -----------------------------------------------------
-  const onlyOpen = positionsRoot.querySelector('[data-role="only-open"]');
-  const viewMode = positionsRoot.querySelector('[data-role="view-mode"]');
-  const stationView = positionsRoot.querySelector('[data-role="station-view"]');
-  const timeView = positionsRoot.querySelector('[data-role="time-view"]');
-  const timeList = positionsRoot.querySelector('[data-role="time-list"]');
-  const placeholders = new Map();
-  slots.forEach(slot => {
-    const marker = document.createComment(`slot-${slot.id}`);
-    slot.el.parentNode.insertBefore(marker, slot.el);
-    placeholders.set(slot.id, marker);
-  });
-
-  function applyOnlyOpen() {
-    const hideFull = !!(onlyOpen && onlyOpen.checked);
-    slots.forEach(slot => {
-      const keep = !hideFull || !slot.el.classList.contains('is-full') || slot.el.classList.contains('is-mine');
-      slot.el.hidden = !keep;
-    });
-    positionsRoot.querySelectorAll('.positions__station').forEach(card => {
-      const anyVisible = Array.from(card.querySelectorAll('.slot')).some(el => !el.hidden);
-      card.hidden = !anyVisible;
-    });
-  }
-
-  function applyViewMode() {
-    if (!viewMode || !stationView || !timeView || !timeList) return;
-    if (viewMode.value === 'time') {
-      Array.from(slots.values())
-        .sort((a, b) => (a.start - b.start) || a.label.localeCompare(b.label))
-        .forEach(slot => timeList.appendChild(slot.el));
-      stationView.hidden = true;
-      timeView.hidden = false;
-    } else {
-      slots.forEach(slot => {
-        const marker = placeholders.get(slot.id);
-        if (marker && marker.parentNode) marker.parentNode.insertBefore(slot.el, marker.nextSibling);
-      });
-      timeView.hidden = true;
-      stationView.hidden = false;
-    }
-    applyOnlyOpen();
-  }
-  if (onlyOpen) onlyOpen.addEventListener('change', applyOnlyOpen);
-  if (viewMode) viewMode.addEventListener('change', applyViewMode);
 
   // ---- "Who's coming?" group row -----------------------------------------
   const toolbar = positionsRoot.querySelector('.positions__toolbar');

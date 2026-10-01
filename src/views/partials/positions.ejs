@@ -9,12 +9,20 @@
   const posMode = (typeof mode !== 'undefined' && mode) ? mode : 'signup';
   let totalSpots = 0;
   let openSpots = 0;
+  let slotCount = 0;
+  const days = new Set();
   posStations.forEach(st => st.time_blocks.forEach(b => {
     const cap = Number(b.capacity_needed) || 0;
     totalSpots += cap;
     openSpots += Math.max(cap - (Number(b.reserved_count) || 0), 0);
+    slotCount += 1;
+    if (!isPotluck && b.start_time) days.add(String(b.start_time).slice(0, 10));
   }));
   const spotWord = isPotluck ? 'item' : 'spot';
+  // Long events: start with full spots hidden; multi-day events start grouped by day.
+  const LONG_EVENT_SLOTS = 20;
+  const startOnlyOpen = slotCount >= LONG_EVENT_SLOTS && openSpots > 0;
+  const startByDay = days.size > 1;
 %>
 <div class="positions" data-positions data-mode="<%= posMode %>">
   <div class="positions__toolbar">
@@ -30,29 +38,47 @@
         <label class="positions__control">
           <span>View by</span>
           <select data-role="view-mode" class="slot-toolbar__select">
-            <option value="station" selected>Station</option>
-            <option value="time">Date &amp; time</option>
+            <option value="station" <%= startByDay ? '' : 'selected' %>>Station</option>
+            <option value="time" <%= startByDay ? 'selected' : '' %>>Date &amp; time</option>
           </select>
         </label>
       <% } %>
       <label class="positions__control positions__control--check">
-        <input type="checkbox" data-role="only-open">
-        <span>Show only open <%= spotWord %>s</span>
+        <input type="checkbox" data-role="only-open" <%= startOnlyOpen ? 'checked' : '' %>>
+        <span>Show only open <%= spotWord %>s <span class="positions__hidden-count" data-role="hidden-count"></span></span>
       </label>
     </div>
   </div>
 
+  <p class="positions__none-open muted" data-role="none-open" hidden>
+    Everything is full right now — thank you! Untick “Show only open <%= spotWord %>s” to see them all.
+  </p>
+
   <div class="positions__time-view" data-role="time-view" hidden>
-    <ul class="slot-list" data-role="time-list"></ul>
+    <nav class="positions__days" data-role="day-links" aria-label="Jump to a day" hidden></nav>
+    <div data-role="time-list"></div>
   </div>
 
   <div class="station-grid positions__station-view" data-role="station-view">
     <% posStations.forEach(station => { %>
-      <article class="card station-card positions__station" data-station-id="<%= station.station_id %>">
+      <%
+        const stationAbout = station.about || station.description || '';
+        const stationDuties = station.duties || '';
+        const stationAllFull = station.time_blocks.every(b => (Number(b.capacity_needed) || 0) - (Number(b.reserved_count) || 0) <= 0)
+          && !station.time_blocks.some(b => (posSummary.byBlock[b.block_id] || []).length);
+      %>
+      <article class="card station-card positions__station<%= stationAllFull ? ' is-all-full' : '' %>" data-station-id="<%= station.station_id %>">
+        <% if (stationAllFull) { %>
+        <details class="positions__full">
+          <summary class="station-card__title positions__full-summary">
+            <h2><%= station.name %></h2>
+            <span class="positions__full-note">Full — thank you!</span>
+            <span class="positions__full-show">Show <%= isPotluck ? 'items' : (station.time_blocks.length === 1 ? 'time' : 'times') %></span>
+          </summary>
+        <% } else { %>
         <div class="station-card__title">
           <h2><%= station.name %></h2>
-          <% const stationAbout = station.about || station.description || ''; %>
-          <% const stationDuties = station.duties || ''; %>
+        <% } %>
           <% if (stationAbout || stationDuties) { %>
             <details class="positions__about">
               <summary>About this <%= isPotluck ? 'category' : 'station' %></summary>
@@ -72,7 +98,9 @@
               </div>
             </details>
           <% } %>
+        <% if (!stationAllFull) { %>
         </div>
+        <% } %>
         <ul class="slot-list">
           <% station.time_blocks.forEach(block => { %>
             <%
@@ -84,6 +112,7 @@
               const conflictNotes = posSummary.conflicts[block.block_id] || [];
               const title = isPotluck ? (block.title || 'Item') : helpers.fmtRange(block.start_time, block.end_time);
               const label = isPotluck ? `${station.name} — ${block.title || 'Item'}` : `${station.name} — ${title}`;
+              const timeOnly = isPotluck ? '' : helpers.fmtTimeRange(block.start_time, block.end_time);
               const isFull = open <= 0;
             %>
             <li class="slot <%= isFull ? 'is-full' : '' %> <%= mine.length ? 'is-mine' : '' %>"
@@ -93,11 +122,13 @@
                 data-title="<%= title %>"
                 data-start="<%= isPotluck ? '' : block.start_time %>"
                 data-end="<%= isPotluck ? '' : block.end_time %>"
+                data-day="<%= isPotluck ? '' : String(block.start_time || '').slice(0, 10) %>"
+                data-day-label="<%= isPotluck ? '' : helpers.fmtDay(block.start_time) %>"
                 data-capacity="<%= cap %>"
                 data-reserved="<%= reserved %>">
               <div class="slot__main">
                 <span class="slot__station" data-role="station-chip"><%= station.name %></span>
-                <strong class="slot__title"><%= title %></strong>
+                <strong class="slot__title"><% if (timeOnly) { %><span class="slot__date"><%= title.slice(0, title.length - timeOnly.length) %></span><%= timeOnly %><% } else { %><%= title %><% } %></strong>
                 <% if (isPotluck && (block.servings_min != null || block.servings_max != null)) { %>
                   <span class="slot__meta">Feeds <%= block.servings_min != null ? block.servings_min : '' %><%= block.servings_max != null ? ('–' + block.servings_max) : '' %></span>
                 <% } %>
@@ -141,6 +172,9 @@
             </li>
           <% }) %>
         </ul>
+        <% if (stationAllFull) { %>
+        </details>
+        <% } %>
       </article>
     <% }) %>
   </div>

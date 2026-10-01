@@ -200,4 +200,4 @@
 <div id="toast-root" aria-live="polite" aria-atomic="true" style="position:fixed; inset: auto 0 max(16px, env(safe-area-inset-bottom)) 0; display:flex; justify-content:center; pointer-events:none; z-index:2000;"></div>
 <div id="manage-toast-data" hidden data-success="<%= (messages && messages.success && messages.success[0]) ? messages.success[0] : '' %>" data-debug="<%= (messages && messages.debug && messages.debug[0]) ? messages.debug[0] : '' %>"></div>
 
-<%- include('../partials/footer', { pageScripts: ['/js/signup.js'] }) %>
+<%- include('../partials/footer', { pageScripts: ['/js/positions.js', '/js/signup.js'] }) %>

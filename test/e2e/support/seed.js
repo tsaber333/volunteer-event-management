@@ -69,6 +69,30 @@ async function seed() {
   ids.events.filled = filled;
   ids.blocks.filled9 = block(station(filled, 'Doors'), at(day + 4, '09:00'), at(day + 4, '10:00'), 1);
 
+  // Long two-day event (22 slots): starts by day, with full spots hidden.
+  const big = createEvent({ name: 'Big Weekend', start: at(day + 5, '09:00'), end: at(day + 6, '16:00') });
+  ids.events.big = big;
+  ids.blocks.bigParking = block(station(big, 'Parking Lead'), at(day + 5, '09:00'), at(day + 5, '12:00'), 1);
+  const ushers = station(big, 'Ushers');
+  const cafe = station(big, 'Cafe');
+  [day + 5, day + 6].forEach((d, i) => {
+    ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00'].forEach(t => {
+      const end = `${String(Number(t.slice(0, 2)) + 1).padStart(2, '0')}:00`;
+      const id = block(ushers, at(d, t), at(d, end), 3);
+      if (i === 1 && t === '10:00') ids.blocks.bigUshersDay2 = id;
+    });
+    ['10:00', '11:00', '12:00', '13:00'].forEach(t => {
+      block(cafe, at(d, t), at(d, `${String(Number(t.slice(0, 2)) + 1).padStart(2, '0')}:00`), 2);
+    });
+  });
+  ids.blocks.bigSound = block(station(big, 'Sound'), at(day + 6, '13:00'), at(day + 6, '14:00'), 1);
+
+  await publicService.processVolunteerSignup({
+    eventId: big,
+    registrant: { name: 'Seed Person', email: 'seed-big@example.test', phone: '' },
+    participants: ['Seed Person'],
+    scheduleAssignments: [{ blockId: ids.blocks.bigParking, participantIndex: 0 }]
+  });
   await publicService.processVolunteerSignup({
     eventId: counts,
     registrant: { name: 'Seed Person', email: 'seed-counts@example.test', phone: '' },
