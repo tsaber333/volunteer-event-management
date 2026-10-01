@@ -40,8 +40,10 @@
   color-scheme: light only;
 }
 
-html, body {
+/* Height on html only: a 100%-tall body would stop the sticky topbar after one screen. */
+html {
   height: 100%;
+  scroll-padding-top: calc(var(--header-height) + 0.5rem);
 }
 
 /* Typography & base body styles ------------------------------------------- */
@@ -3682,11 +3684,10 @@ button.group-chip { cursor: pointer; }
   text-decoration: none;
 }
 .positions__day-link:hover, .positions__day-link:focus-visible { background: rgba(37, 99, 235, 0.08); }
-/* The topbar scrolls away (body is only viewport-tall), so stick to the top. */
-.positions__day { display: grid; gap: 0.6rem; scroll-margin-top: 0.5rem; }
+.positions__day { display: grid; gap: 0.6rem; }
 .positions__day-title {
   position: sticky;
-  top: 0.25rem;
+  top: calc(var(--header-height) + 0.25rem);
   z-index: 2;
   margin: 0;
   padding: 0.45rem 0.85rem;
