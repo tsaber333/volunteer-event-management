@@ -7,12 +7,13 @@
   const faviconUrl = brand.faviconUrl;
   const logoUrl = brand.logoUrl;
   const homePath = brand.homePath || '/';
-  const fullTitle = pageTitle === appName ? appName : `${pageTitle} · ${appName}`;
+  const siteBanner = brand.siteBanner || '';
+  const fullTitle = (siteBanner ? '[Test] ' : '') + (pageTitle === appName ? appName : `${pageTitle} · ${appName}`);
   const accountDisplay = user ? (user.displayName || user.email || '') : '';
   const accountInitial = accountDisplay ? accountDisplay.trim().charAt(0).toUpperCase() : 'A';
 %>
 <!doctype html>
-<html lang="en">
+<html lang="en"<%- siteBanner ? ' class="has-site-banner"' : '' %>>
 <head>
   <meta charset="utf-8">
   <title><%= fullTitle %></title>
@@ -47,6 +48,9 @@
 </head>
 <body class="app-shell is-<%= variant %>">
 <header class="topbar">
+  <% if (siteBanner) { %>
+    <div class="site-banner" role="note"><%= siteBanner %></div>
+  <% } %>
   <div class="topbar__inner">
     <a class="topbar__brand" href="<%= homePath %>" aria-label="<%= appName %> home">
       <% if (logoUrl) { %>

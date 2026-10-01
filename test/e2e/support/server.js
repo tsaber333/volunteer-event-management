@@ -25,7 +25,8 @@ Object.assign(process.env, {
   MAIL_USER: '',
   MAIL_PASS: '',
   GOOGLE_CLIENT_ID: '',
-  GOOGLE_CLIENT_SECRET: ''
+  GOOGLE_CLIENT_SECRET: '',
+  SITE_BANNER: ''
 });
 
 require('../../../src/config/database').initDatabase();
