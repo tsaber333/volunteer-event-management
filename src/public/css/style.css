@@ -3660,6 +3660,58 @@ button.group-chip { cursor: pointer; }
   font-weight: 700;
 }
 .positions__time-view .slot__station { display: inline-block; }
+.positions__time-view .slot__date { display: none; }
+
+/* Long events: day groups with jump links, one-line full stations */
+.positions__hidden-count { font-weight: 500; color: var(--text-muted); }
+.positions__none-open { margin: 0; padding: 0.85rem 1rem; border-radius: var(--radius-md); background: var(--surface-subtle); }
+.positions__time-view { display: grid; gap: 1rem; }
+.positions__time-view [data-role="time-list"] { display: grid; gap: 1.25rem; }
+.positions__days { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.positions__day-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid rgba(37, 99, 235, 0.35);
+  background: #fff;
+  color: var(--brand-strong);
+  font-weight: 700;
+  font-size: 0.92rem;
+  text-decoration: none;
+}
+.positions__day-link:hover, .positions__day-link:focus-visible { background: rgba(37, 99, 235, 0.08); }
+/* The topbar scrolls away (body is only viewport-tall), so stick to the top. */
+.positions__day { display: grid; gap: 0.6rem; scroll-margin-top: 0.5rem; }
+.positions__day-title {
+  position: sticky;
+  top: 0.25rem;
+  z-index: 2;
+  margin: 0;
+  padding: 0.45rem 0.85rem;
+  font-size: 1.05rem;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-sm);
+}
+.positions__station.is-all-full.card { padding-block: 0.75rem; background: var(--surface-subtle); }
+.positions__full-summary {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  cursor: pointer;
+  list-style: none;
+}
+.positions__full-summary::-webkit-details-marker { display: none; }
+.positions__full-summary h2 { margin: 0; font-size: 1.02rem; color: var(--text-muted); }
+.positions__full-note { color: var(--text-muted); font-size: 0.9rem; font-weight: 600; }
+.positions__full-show { margin-left: auto; color: var(--brand-strong); font-size: 0.88rem; font-weight: 600; }
+.positions__full-show::after { content: " ▾"; }
+.positions__full[open] .positions__full-show::after { content: " ▴"; }
+.positions__full[open] .positions__full-summary { margin-bottom: 0.75rem; }
 
 .slot__spots { display: flex; align-items: center; gap: 0.6rem; font-size: 0.88rem; color: var(--text-muted); }
 .spots-bar {

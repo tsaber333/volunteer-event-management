@@ -63,6 +63,22 @@ function fmtRange(startTxt, endTxt) {
   return `${fmt12(startTxt)} – ${fmt12(endTxt)}`;
 }
 
+// "Wed, Dec 23" for day headings and jump links.
+function fmtDay(txt) {
+  const dt = parseToDate(txt);
+  if (!dt) return '';
+  return dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+// "3:30 PM – 5:00 PM" when both ends fall on the same day, else ''.
+function fmtTimeRange(startTxt, endTxt) {
+  const s = parseToDate(startTxt);
+  const e = parseToDate(endTxt);
+  if (!s || !e || s.toDateString() !== e.toDateString()) return '';
+  const opts = { hour: 'numeric', minute: '2-digit' };
+  return `${s.toLocaleTimeString(undefined, opts)} – ${e.toLocaleTimeString(undefined, opts)}`;
+}
+
 /**
  * Render a safe, lightweight rich-text fragment from plain text input.
  * Supports:
@@ -145,4 +161,4 @@ function jsonForScript(value) {
     .replace(/\u2029/g, '\\u2029');
 }
 
-module.exports = { fmt12, canonicalLocal, fmtRange, renderRichText, escapeHtml, jsonForScript };
+module.exports = { fmt12, canonicalLocal, fmtRange, fmtDay, fmtTimeRange, renderRichText, escapeHtml, jsonForScript };

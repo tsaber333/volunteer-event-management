@@ -27,7 +27,7 @@ Run `npm run init-db` anytime to (re)create the SQLite schema in `db/volunteer.d
 
 ### Volunteer flow (what they see)
 - The events list shows how many spots/items each event still needs.
-- Step 1: Browse open slots (schedule) or items (food prep) and press “Sign up” on each one. Filters: view by station or time, show only open.
+- Step 1: Browse open slots (schedule) or items (food prep) and press “Sign up” on each one. Filters: view by station or date & time, show only open. Multi-day events start in the date & time view with a heading and jump link per day; events with 20+ slots start with only open spots shown; fully booked stations collapse to one line.
 - Step 2: Enter contact info and choose who fills each spot (the registrant or “Someone else…”); food prep also asks for dish names. On wide screens Step 2 is pinned beside the list; on phones/tablets the “Continue” bar opens it as a slide-up panel.
 - Confirm. The success page lists what was reserved and a manage link is emailed.
 - The same person can’t take one slot twice or two overlapping slots, unless an admin turns on “Let one person sign up for time slots that overlap” in Edit event (`events.allow_overlap`, off by default). Rules are enforced on the server for sign-up, manage, and admin moves.
