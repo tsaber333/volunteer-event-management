@@ -73,6 +73,14 @@ test('view controls work on the “already signed up” page too', async ({ page
   await expect(page.locator('.positions__station.is-all-full', { hasText: 'Parking Lead' })).toBeVisible();
 });
 
+test('the top bar stays on screen to the bottom of a long page', async ({ page }) => {
+  const { events } = ids();
+  await page.goto(`/events/${events.big}`);
+  await onlyOpen(page).uncheck();
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect.poll(() => page.locator('.topbar').evaluate(el => el.getBoundingClientRect().top)).toBe(0);
+});
+
 test.describe('phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 
