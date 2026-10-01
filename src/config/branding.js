@@ -28,6 +28,8 @@ function getBranding() {
   const supportContactEmail = clean(process.env.SUPPORT_CONTACT_EMAIL) || '';
   const supportContactPhone = clean(process.env.SUPPORT_CONTACT_PHONE) || '';
   const mailingAddress = clean(process.env.ORG_MAILING_ADDRESS) || '';
+  // Shown in a strip at the top of every page, e.g. on a test copy of the site.
+  const siteBanner = clean(process.env.SITE_BANNER);
 
   return {
     appName,

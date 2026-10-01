@@ -32,6 +32,9 @@
   --radius-lg: 22px;
   --layout-max: 1120px;
   --header-height: 72px;
+  --banner-height: 0px;
+  /* Full height of the sticky topbar; offsets for other sticky things and jumps. */
+  --sticky-top: calc(var(--header-height) + var(--banner-height));
   --focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.28);
   --danger: #dc2626;
   --success: #047857;
@@ -43,7 +46,11 @@
 /* Height on html only: a 100%-tall body would stop the sticky topbar after one screen. */
 html {
   height: 100%;
-  scroll-padding-top: calc(var(--header-height) + 0.5rem);
+  scroll-padding-top: calc(var(--sticky-top) + 0.5rem);
+}
+
+html.has-site-banner {
+  --banner-height: 1.75rem;
 }
 
 /* Typography & base body styles ------------------------------------------- */
@@ -893,6 +900,20 @@ details.dropdown[open] > summary { opacity: 0.9; }
   background: var(--surface-elevated);
   backdrop-filter: blur(18px);
   box-shadow: 0 1px 0 rgba(15, 23, 42, 0.06), 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.site-banner {
+  height: var(--banner-height);
+  padding: 0 1rem;
+  overflow: hidden;
+  background: #b45309;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: var(--banner-height);
+  text-align: center;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .topbar__inner {
@@ -3687,7 +3708,7 @@ button.group-chip { cursor: pointer; }
 .positions__day { display: grid; gap: 0.6rem; }
 .positions__day-title {
   position: sticky;
-  top: calc(var(--header-height) + 0.25rem);
+  top: calc(var(--sticky-top) + 0.25rem);
   z-index: 2;
   margin: 0;
   padding: 0.45rem 0.85rem;
@@ -3944,8 +3965,8 @@ button.group-chip { cursor: pointer; }
   .app-shell .signup-layout--with-panel > .page-shell { width: auto; margin-inline: 0; padding-inline: 0; }
   .signup-layout--with-panel > .signup-step {
     position: sticky;
-    top: calc(var(--header-height) + 0.75rem);
-    max-height: calc(100vh - var(--header-height) - 1.5rem);
+    top: calc(var(--sticky-top) + 0.75rem);
+    max-height: calc(100vh - var(--sticky-top) - 1.5rem);
     overflow-y: auto;
     overscroll-behavior: contain;
     margin-bottom: 0;

@@ -50,6 +50,8 @@ Run `npm run init-db` anytime to (re)create the SQLite schema in `db/volunteer.d
 | `DB_PATH` / `SESSION_DB_PATH` | Locations for data and session SQLite files. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_WORKSPACE_DOMAIN` | Google login for admins. |
 | `MAIL_SERVICE` / `MAIL_HOST` / `MAIL_PORT` / `MAIL_USER` / `MAIL_PASS` | Outgoing email settings (console logging is used if none provided). |
+| `MAIL_DISABLED` | `true` prints every email to the log instead of sending it, even if SMTP settings are present. Use on test copies. |
+| `SITE_BANNER` | Text for a strip at the top of every page (e.g. `Test site — emails are not sent`); also adds “[Test]” to page titles. |
 | `APP_NAME`, `APP_TAGLINE`, `ORG_DISPLAY_NAME`, `BRAND_*`, `SUPPORT_CONTACT_*` | Branding and support info surfaced in headers, emails, and help pages. |
 | `MANAGE_TOKEN_TTL_DAYS` | How long emailed manage links remain valid (default 30). |
 | `APP_TIMEZONE` | IANA time zone that event times are entered in, used for calendar files and Google Calendar links (default `America/Vancouver`). B.C.'s switch to year-round UTC−7 from November 2026 is applied even on Node versions whose built-in time-zone data predates it. |
@@ -78,6 +80,23 @@ npm run test:e2e                  # just the browser tests in test/e2e/
 - With `NODE_ENV=test` the mailer never sends real email, even if SMTP settings are present; the browser tests read "sent" messages from an outbox file instead.
 - Covered: events list counts, sign-up for a spot and for Food Prep, signing up family or only someone else, overlapping times blocked or allowed, the same email from another device, the remembered device and "Not you?", manage add/remove/clear, calendar download, and phone layout.
 - A failing test leaves a screenshot and trace in `test-results/` (`npx playwright show-trace <file>`). Set `KEEP_TEST_DATA=1` to keep the temp database for a look afterwards.
+
+## Test site
+
+A password-protected copy of the app for trying changes (on a phone, too) before they go live. It runs with its own `.env`, port and database copy, and should always set:
+
+```bash
+MAIL_DISABLED=true                       # emails go to the log, never to people
+SITE_BANNER=Test site — emails are not sent
+```
+
+To refresh its data from the live site, stop the test copy, copy the database, and start it again:
+
+```bash
+node scripts/copy-db.js /path/to/live/db/volunteer.db   # target: DB_PATH from .env
+```
+
+The copy uses SQLite's online backup, so the live site can keep running; it checks the copy's integrity before replacing the old one. The copy holds real names and emails, so keep the test site behind a password.
 
 ## Contributing on GitHub
 

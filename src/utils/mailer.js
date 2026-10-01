@@ -12,6 +12,9 @@ let cachedTransporter = null;
 // settings is present. MAIL_OUTBOX (test only) collects messages as JSON lines.
 const IS_TEST = process.env.NODE_ENV === 'test';
 const OUTBOX = IS_TEST ? (process.env.MAIL_OUTBOX || '') : '';
+// MAIL_DISABLED=true (test site): print every email to the log instead of
+// sending it, whatever SMTP settings are present.
+const MAIL_DISABLED = /^(1|true|yes)$/i.test(String(process.env.MAIL_DISABLED || '').trim());
 
 const branding = getBranding();
 const DEFAULT_FROM = process.env.MAIL_FROM || `${branding.orgName} Volunteers <no-reply@example.org>`;
@@ -43,7 +46,7 @@ function createTransporter() {
     baseConfig.auth = { user: MAIL_USER, pass: MAIL_PASS };
   }
 
-  if (!IS_TEST && Object.keys(baseConfig).length > 0) {
+  if (!IS_TEST && !MAIL_DISABLED && Object.keys(baseConfig).length > 0) {
     cachedTransporter = nodemailer.createTransport(baseConfig);
     cachedTransporter.__defaultFrom = DEFAULT_FROM;
     cachedTransporter.__defaultReplyTo = DEFAULT_REPLY_TO;
