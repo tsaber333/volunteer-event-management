@@ -26,10 +26,8 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     // Try data attribute first; fall back to inline success notice text.
     let successMsg = '';
-    let debugMsg = '';
     if (toastData) {
       successMsg = toastData.getAttribute('data-success') || '';
-      debugMsg = toastData.getAttribute('data-debug') || '';
     }
     if (successMsg && successMsg.trim()) {
       showToast(successMsg.trim(), 'success');
@@ -39,9 +37,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const text = (inline.textContent || '').replace(/\s+/g, ' ').trim();
         if (text) showToast(text, 'success');
       }
-    }
-    if (debugMsg && debugMsg.trim()) {
-      showToast(debugMsg.trim(), 'danger');
     }
   } catch (_) {}
   console.log('DOM fully loaded. Initializing scripts.');

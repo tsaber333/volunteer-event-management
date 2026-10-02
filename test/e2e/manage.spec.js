@@ -62,6 +62,24 @@ test('removing every spot cancels the sign-up', async ({ page }) => {
   await expect(page.getByRole('heading', { name: /You’re signed up/ })).toHaveCount(0);
 });
 
+test('a failed save never shows other volunteers’ details', async ({ page }) => {
+  const { events, blocks } = ids();
+  const managePath = await quickSignup(page, { eventId: events.big, blockIds: [blocks.bigSound], name: 'Pry Person', email: 'pry@example.test' });
+
+  // Force a save into the full Parking Lead spot (held by seed-big@example.test), as a crafted request could.
+  await page.goto(`${managePath}?debug=capacity`);
+  await page.evaluate((blockId) => {
+    const input = document.querySelector('input[name="registration_payload"]');
+    input.value = JSON.stringify({ scheduleAssignments: [{ blockId, participantName: 'Pry Person' }], potluckAssignments: [] });
+    input.form.submit();
+  }, blocks.bigParking);
+
+  await expect(page.locator('.notice--error').first()).toBeVisible();
+  const html = await page.content();
+  expect(html).not.toContain('seed-big@example.test');
+  expect(html).not.toContain('rawSchedRows');
+});
+
 test('an old or mistyped manage link goes back to the events list', async ({ page }) => {
   await page.goto('/manage/0123456789abcdef0123456789abcdef');
   await expect(page).toHaveURL(/\/events$/);

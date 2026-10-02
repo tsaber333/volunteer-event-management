@@ -8,7 +8,6 @@
 <% const supportEmail = brandInfo.supportContactEmail || ''; %>
 <% const supportName = brandInfo.supportContactName || brandInfo.orgName || 'our team'; %>
 <% const emailPrefs = (typeof emailPreferences !== 'undefined' && emailPreferences) ? emailPreferences : { optIn: true, volunteerEmail: '' }; %>
-<% const debugCapacity = query && String(query.debug || '').toLowerCase() === 'capacity'; %>
 <% const _s = new Date(event.date_start); const _e = new Date(event.date_end); const _same = _s.getFullYear()===_e.getFullYear() && _s.getMonth()===_e.getMonth() && _s.getDate()===_e.getDate(); %>
 <% const spotWord = isPotluck ? 'item' : 'spot'; %>
 <%
@@ -28,9 +27,6 @@
     <% } else { %>
       <p class="page-subtitle"><%= fmt12(event.date_start) %> — <%= fmt12(event.date_end) %></p>
     <% } %>
-    <% if (debugCapacity && messages && messages.debug && messages.debug.length) { %>
-      <pre class="debug-block"><%= messages.debug[0] %></pre>
-    <% } %>
   </div>
   <div class="page-header__actions">
     <a href="/events/<%= event.event_id %>" class="btn btn-accent small">
@@ -49,7 +45,7 @@
   <article class="card card--plain signup-panel">
     <p class="muted">Change who is filling a <%= spotWord %>, remove one, or add more from the list below. Nothing changes until you press “Save changes.”</p>
     <div class="notice notice--info" data-role="pending-note" hidden></div>
-    <form id="manage-form" action="/manage/<%= token %><%= debugCapacity ? '?debug=capacity' : '' %>" method="POST" novalidate data-role="picks-form">
+    <form id="manage-form" action="/manage/<%= token %>" method="POST" novalidate data-role="picks-form">
       <input type="hidden" name="_csrf" value="<%= locals.csrfToken %>">
       <input type="hidden" name="registration_payload" data-role="payload" value="">
       <div class="notice notice--error" data-role="form-error" role="alert" hidden></div>
@@ -198,6 +194,6 @@
 }) %></script>
 
 <div id="toast-root" aria-live="polite" aria-atomic="true" style="position:fixed; inset: auto 0 max(16px, env(safe-area-inset-bottom)) 0; display:flex; justify-content:center; pointer-events:none; z-index:2000;"></div>
-<div id="manage-toast-data" hidden data-success="<%= (messages && messages.success && messages.success[0]) ? messages.success[0] : '' %>" data-debug="<%= (messages && messages.debug && messages.debug[0]) ? messages.debug[0] : '' %>"></div>
+<div id="manage-toast-data" hidden data-success="<%= (messages && messages.success && messages.success[0]) ? messages.success[0] : '' %>"></div>
 
 <%- include('../partials/footer', { pageScripts: ['/js/positions.js', '/js/signup.js'] }) %>

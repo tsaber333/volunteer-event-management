@@ -1626,10 +1626,9 @@ const publicDal = {
         if (debugInfo) {
           debugInfo.rawSchedCounts = schedCountRows;
           debugInfo.rawSchedRows = db.prepare(`
-            SELECT sa.assignment_id, sa.time_block_id, sa.participant_id, p.registration_id, r.registrant_email
+            SELECT sa.assignment_id, sa.time_block_id, sa.participant_id, p.registration_id
             FROM schedule_assignments sa
             JOIN participants p ON p.participant_id = sa.participant_id
-            JOIN registrations r ON r.registration_id = p.registration_id
             WHERE sa.time_block_id IN (${placeholders})
           `).all(schedIds);
         }
@@ -1651,10 +1650,9 @@ const publicDal = {
         if (debugInfo) {
           debugInfo.rawPotCounts = potCountRows;
           debugInfo.rawPotRows = db.prepare(`
-            SELECT pa.assignment_id, pa.item_id, pa.participant_id, pa.dish_name, p.registration_id, r.registrant_email
+            SELECT pa.assignment_id, pa.item_id, pa.participant_id, p.registration_id
             FROM potluck_assignments pa
             JOIN participants p ON p.participant_id = pa.participant_id
-            JOIN registrations r ON r.registration_id = p.registration_id
             WHERE pa.item_id IN (${placeholders})
           `).all(potIds);
         }
