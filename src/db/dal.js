@@ -97,6 +97,10 @@ try { db.prepare(`ALTER TABLE registrations ADD COLUMN manage_token_expires_at T
 try { db.prepare(`ALTER TABLE registrations ADD COLUMN email_opt_in INTEGER NOT NULL DEFAULT 1`).run(); } catch (_) {}
 try { db.prepare(`ALTER TABLE registrations ADD COLUMN email_opted_out_at TEXT`).run(); } catch (_) {}
 try { db.prepare(`ALTER TABLE registrations ADD COLUMN email_opt_out_reason TEXT`).run(); } catch (_) {}
+// Picks from a sign-up attempt with an already-registered email, waiting for
+// the owner to add them from the emailed link.
+try { db.prepare(`ALTER TABLE registrations ADD COLUMN held_picks TEXT`).run(); } catch (_) {}
+try { db.prepare(`ALTER TABLE registrations ADD COLUMN held_picks_at TEXT`).run(); } catch (_) {}
 
 try {
   db.prepare(`
@@ -1805,6 +1809,23 @@ const publicDal = {
       WHERE registration_id = ?
     `).run(hashed, expiresAt || null, registrationId);
     return token;
+  },
+
+  setHeldPicks: (registrationId, picks) => {
+    const list = Array.isArray(picks) && picks.length ? picks : null;
+    db.prepare(`UPDATE registrations SET held_picks = ?, held_picks_at = ? WHERE registration_id = ?`)
+      .run(list ? JSON.stringify(list) : null, list ? new Date().toISOString() : null, registrationId);
+  },
+
+  getHeldPicks: (registrationId) => {
+    const row = db.prepare(`SELECT held_picks, held_picks_at FROM registrations WHERE registration_id = ?`).get(registrationId);
+    if (!row || !row.held_picks) return { picks: [], at: null };
+    try {
+      const picks = JSON.parse(row.held_picks);
+      return { picks: Array.isArray(picks) ? picks : [], at: row.held_picks_at };
+    } catch (_) {
+      return { picks: [], at: null };
+    }
   },
 
   setRegistrationEmailPreference: (registrationId, opts = {}) => {

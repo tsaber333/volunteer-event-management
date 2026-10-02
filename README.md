@@ -33,7 +33,7 @@ Run `npm run init-db` anytime to (re)create the SQLite schema in `db/volunteer.d
 - The same person can’t take one slot twice or two overlapping slots, unless an admin turns on “Let one person sign up for time slots that overlap” in Edit event (`events.allow_overlap`, off by default). Rules are enforced on the server for sign-up, manage, and admin moves.
 - Add to calendar: the thank-you page, manage page, and confirmation email (attached `.ics` plus a link) offer the group's slots as calendar entries — `GET /manage/:token/calendar.ics` (optionally `?block=<id>`) plus per-slot Google Calendar links. Times are converted from `APP_TIMEZONE` to UTC. Food Prep events get one entry (all-day if the event spans several days) listing everyone's dishes.
 - Returning on the same device: a `signup_<eventId>` cookie (httpOnly, lasts `MANAGE_TOKEN_TTL_DAYS`) shows “You’re signed up…” at the top of the event page, with a “Not you?” button that forgets it.
-- Signing up again with an email that already has a sign-up emails the manage link and holds the new picks in the session; opening the link in the same browser pre-loads them on the manage page.
+- Signing up again with an email that already has a sign-up never opens that sign-up for the person submitting. The new picks are held on the existing registration (`held_picks`, kept 7 days) and the email owner gets a list of them with an "Add these to my sign-up" button; the manage link pre-loads them on any device, and they are cleared once the owner saves.
 
 ### Admin notes
 - Google OAuth is required; without credentials the login flow will fail.

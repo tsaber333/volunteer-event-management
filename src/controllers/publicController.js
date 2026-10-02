@@ -63,44 +63,6 @@ function getRememberedSignup(req, res, event) {
   };
 }
 
-// Picks are kept as { blockId, personName, dishName } so they survive being
-// handed from the sign-up page to a manage link for an existing registration.
-function picksFromPayload(payload) {
-  if (!payload || typeof payload !== 'object') return [];
-  const names = Array.isArray(payload.participants)
-    ? payload.participants.map(p => String((p && (p.name || p.participant_name)) || p || '').trim())
-    : [];
-  const sched = Array.isArray(payload.scheduleAssignments) ? payload.scheduleAssignments : [];
-  const pot = Array.isArray(payload.potluckAssignments) ? payload.potluckAssignments : [];
-  const picks = [];
-  sched.forEach(a => {
-    const blockId = Number(a && a.blockId);
-    if (Number.isFinite(blockId)) picks.push({ blockId, personName: names[Number(a.participantIndex)] || '', dishName: '' });
-  });
-  pot.forEach(a => {
-    const blockId = Number(a && a.itemId);
-    if (Number.isFinite(blockId)) {
-      picks.push({ blockId, personName: names[Number(a.participantIndex)] || '', dishName: String(a.dishName || '').slice(0, 200) });
-    }
-  });
-  return picks.slice(0, MAX_PENDING_PICKS).map(p => ({ ...p, personName: p.personName.slice(0, 100) }));
-}
-
-function stashPendingPicks(req, eventId, picks) {
-  if (!req.session || !eventId || !picks.length) return;
-  req.session.pendingPicks = req.session.pendingPicks || {};
-  req.session.pendingPicks[String(Number(eventId))] = picks;
-}
-
-function takePendingPicks(req, eventId) {
-  const store = req.session && req.session.pendingPicks;
-  const key = String(Number(eventId));
-  if (!store || !store[key]) return [];
-  const picks = Array.isArray(store[key]) ? store[key] : [];
-  delete store[key];
-  return picks;
-}
-
 function redactRequestBody(body) {
     if (!body || typeof body !== 'object') return {};
     try {
@@ -224,9 +186,6 @@ exports.handleSignup = async (req, res, next) => {
 
     try {
       const result = await publicService.processVolunteerSignup(payload);
-      if (result.alreadyRegistered) {
-        stashPendingPicks(req, payload.eventId, picksFromPayload(payload));
-      }
       // Anyone can type any email, so only a brand-new sign-up is remembered on
       // this device; an existing one is reached through the emailed link only.
       if (result.token && !result.alreadyRegistered) rememberSignup(res, payload.eventId, result.token);
@@ -245,6 +204,7 @@ exports.handleSignup = async (req, res, next) => {
         eventName: evt ? evt.name : '',
         manageUrl: result.manageUrl,
         alreadyRegistered: result.alreadyRegistered,
+        heldCount: result.heldCount || 0,
         volunteerEmail: payload.registrant ? payload.registrant.email : req.body.email
       });
     } catch (error) {
@@ -294,7 +254,7 @@ exports.showManageSignup = (req, res, next) => {
 
         // Picks carried over from the event page: held picks from a sign-up
         // attempt with an already-registered email, or "?add=<id>" links.
-        const pendingPicks = takePendingPicks(req, event.event_id);
+        const pendingPicks = publicService.getHeldPicks(registration.registration_id).slice(0, MAX_PENDING_PICKS);
         const addParam = req.query.add;
         (Array.isArray(addParam) ? addParam : (addParam ? [addParam] : [])).forEach(raw => {
           const blockId = Number(raw);
@@ -444,25 +404,6 @@ exports.updateEmailPreference = async (req, res) => {
       return res.redirect('/events');
     }
     return res.redirect(`/manage/${token}`);
-  }
-};
-
-// AJAX: check if a registration already exists for this event/email; if so, send manage link(s).
-exports.checkDuplicateRegistration = async (req, res) => {
-  try {
-    const eventId = req.body.eventId || req.body.event_id || req.body.event;
-    const email = (req.body.email || '').trim();
-    if (!eventId || !email) {
-      return res.status(400).json({ ok: false, error: 'Missing event or email.' });
-    }
-    const result = await publicService.checkDuplicateRegistration(eventId, email);
-    if (result && result.duplicate) {
-      stashPendingPicks(req, eventId, picksFromPayload(req.body.payload));
-    }
-    return res.json({ ok: result.ok, duplicate: !!result.duplicate });
-  } catch (err) {
-    console.error('--- ERROR IN checkDuplicateRegistration ---', err);
-    return res.status(500).json({ ok: false, error: 'Unable to check duplicates.' });
   }
 };
 

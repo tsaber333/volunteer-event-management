@@ -160,6 +160,57 @@ function issueManageToken(registrationId) {
   return token;
 }
 
+const MAX_HELD_PICKS = 50;
+const HELD_PICKS_DAYS = 7;
+
+// Picks are kept as { blockId, personName, dishName } so they survive being
+// handed from the sign-up page to the emailed manage link.
+function picksFromPayload(payload) {
+  if (!payload || typeof payload !== 'object') return [];
+  const names = Array.isArray(payload.participants)
+    ? payload.participants.map(p => String((p && (p.name || p.participant_name)) || p || '').trim())
+    : [];
+  const sched = Array.isArray(payload.scheduleAssignments) ? payload.scheduleAssignments : [];
+  const pot = Array.isArray(payload.potluckAssignments) ? payload.potluckAssignments : [];
+  const picks = [];
+  sched.forEach(a => {
+    const blockId = Number(a && a.blockId);
+    if (Number.isFinite(blockId)) picks.push({ blockId, personName: names[Number(a.participantIndex)] || '', dishName: '' });
+  });
+  pot.forEach(a => {
+    const blockId = Number(a && a.itemId);
+    if (Number.isFinite(blockId)) {
+      picks.push({ blockId, personName: names[Number(a.participantIndex)] || '', dishName: String(a.dishName || '').slice(0, 200) });
+    }
+  });
+  return picks.slice(0, MAX_HELD_PICKS).map(p => ({ ...p, personName: p.personName.slice(0, 100) }));
+}
+
+// Pairs each pick with a readable label, dropping spots not in this event.
+function describeHeldPicks(event, picks) {
+  if (!event || !Array.isArray(picks) || !picks.length) return [];
+  const isPotluck = String(event.signup_mode || '').toLowerCase() === 'potluck';
+  const blocks = new Map();
+  (event.stations || []).forEach(st => {
+    (st.time_blocks || []).forEach(tb => blocks.set(Number(tb.block_id), { stationName: st.name || 'Station', tb }));
+  });
+  return picks.map(pick => {
+    const found = blocks.get(Number(pick.blockId));
+    if (!found) return null;
+    const label = isPotluck
+      ? `${found.stationName} — ${found.tb.title || 'Item'}`
+      : `${found.stationName} — ${fmtSlotRange(found.tb.start_time, found.tb.end_time)}`;
+    return { pick, label };
+  }).filter(Boolean);
+}
+
+function getHeldPicks(registrationId) {
+  const { picks, at } = dal.public.getHeldPicks(registrationId);
+  if (!picks.length || !at) return [];
+  if (Date.now() - new Date(at).getTime() > HELD_PICKS_DAYS * 24 * 60 * 60 * 1000) return [];
+  return picks;
+}
+
 /**
  * Merge duplicate registrations for the same event/email into a single
  * registration so the person has one manage link. Returns the surviving
@@ -243,26 +294,6 @@ function mergeRegistrationsForEmail(eventId, email, primaryIdHint) {
   });
   try { dal.public.deleteEmptyRegistrations(eventId, email); } catch (_) {}
   return primary;
-}
-
-async function checkDuplicateRegistration(eventId, email) {
-  const eventIdNum = Number(eventId);
-  const normalizedEmail = String(email || '').trim();
-  if (!eventIdNum || !normalizedEmail) {
-    return { ok: false, duplicate: false };
-  }
-  try { mergeRegistrationsForEmail(eventIdNum, normalizedEmail); } catch (_) {}
-  try { dal.public.deleteEmptyRegistrations(eventIdNum, normalizedEmail); } catch (_) {}
-  const existing = dal.public.findRegistrationsByEmail(eventIdNum, normalizedEmail) || [];
-  if (!existing.length) {
-    return { ok: true, duplicate: false };
-  }
-  const reminder = await sendManageReminder(normalizedEmail, eventIdNum);
-  return {
-    ok: true,
-    duplicate: true,
-    manageUrls: reminder && reminder.manageUrls ? reminder.manageUrls : undefined
-  };
 }
 
 /**
@@ -696,12 +727,14 @@ async function processVolunteerSignup(payload) {
   }
   const existingRegs = dal.public.findRegistrationsByEmail(eventId, registrant.email) || [];
   // The manage link goes to the email owner only, never back to the submitter.
+  // The new picks wait on their sign-up until they add them from that email.
   if (existingRegs.length) {
-    await sendManageReminder(registrant.email, eventId);
+    const reminder = await sendManageReminder(registrant.email, eventId, { picks: picksFromPayload(payload) });
     return {
       registrationId: existingRegs[0].registration_id,
       eventId,
-      alreadyRegistered: true
+      alreadyRegistered: true,
+      heldCount: (reminder && reminder.heldCount) || 0
     };
   }
 
@@ -1133,6 +1166,7 @@ async function updateVolunteerSignup(token, scheduleAssignments, potluckAssignme
     };
   }
 
+  dal.public.setHeldPicks(registration.registration_id, []);
   const detail = dal.public.getRegistrationDetailWithAssignments(registration.registration_id);
   const participants = groupAssignments(detail);
   const expiresAt = computeExpiryDate();
@@ -1149,7 +1183,7 @@ async function updateVolunteerSignup(token, scheduleAssignments, potluckAssignme
   return { registration, event, participants, debug: replaceResult && replaceResult.debug };
 }
 
-async function sendManageReminder(email, eventId) {
+async function sendManageReminder(email, eventId, options = {}) {
   const inputEmail = String(email || '').trim();
   const eventIdNum = Number(eventId);
   const event = dal.public.getEventBasic(eventIdNum);
@@ -1182,9 +1216,19 @@ async function sendManageReminder(email, eventId) {
 
   const primaryReg = tokens[0].reg;
   const isMulti = tokens.length > 1;
-  const subject = isMulti
-    ? `Manage your signups for ${event.name}`
-    : `Manage your signup for ${event.name}`;
+  // With several sign-ups there's no single one to add the picks to.
+  const held = isMulti ? [] : describeHeldPicks(getEventDetailsForPublic(eventIdNum), options.picks);
+  if (held.length) dal.public.setHeldPicks(primaryReg.registration_id, held.map(h => h.pick));
+  const holding = held.length > 0;
+  const spotWord = String(event.signup_mode || '').toLowerCase() === 'potluck' ? 'item' : 'spot';
+  const heldCountText = `${held.length} ${spotWord}${held.length === 1 ? '' : 's'}`;
+  const heldLine = (h) => [h.label, h.pick.personName, h.pick.dishName ? `bringing ${h.pick.dishName}` : '']
+    .filter(Boolean).join(' — ');
+  const subject = holding
+    ? `Add your new ${spotWord}s to your sign-up for ${event.name}`
+    : isMulti
+      ? `Manage your signups for ${event.name}`
+      : `Manage your signup for ${event.name}`;
   const { supportName, supportEmail, supportPhone, supportContactHtml, orgName, orgMailingAddress } = resolveSupportContact();
   const contactLines = [];
   if (supportEmail) contactLines.push(`Email: ${supportEmail}`);
@@ -1196,23 +1240,37 @@ async function sendManageReminder(email, eventId) {
     mailingAddress: orgMailingAddress,
     manageUrl: tokens[0].manageUrl
   });
-  const textParts = [
-    `Hi ${primaryReg.registrant_name || inputEmail},`,
-    '',
-    isMulti
-      ? `We found multiple signups for ${event.name} with this email. Use the links below to manage each one.`
-      : `Use the link below to view or edit your group selections for ${event.name}.`,
-    ''
-  ];
-  tokens.forEach((t, idx) => {
-    textParts.push(`Signup ${idx + 1}: ${t.manageUrl}`);
-  });
+  const textParts = [`Hi ${primaryReg.registrant_name || inputEmail},`, ''];
+  if (holding) {
+    textParts.push(
+      `You picked ${heldCountText} for ${event.name}. This email already has a sign-up, so we're holding them for you:`,
+      '',
+      ...held.map(h => `- ${heldLine(h)}`),
+      '',
+      `Add these to my sign-up: ${tokens[0].manageUrl}`,
+      '',
+      'The link opens your sign-up with these ready. Check them and press "Save changes" to finish. It works on any phone or computer.',
+      '',
+      `Didn't pick these? Just ignore this email. Nothing changes, and we'll let them go after ${HELD_PICKS_DAYS} days.`
+    );
+  } else {
+    textParts.push(
+      isMulti
+        ? `We found multiple signups for ${event.name} with this email. Use the links below to manage each one.`
+        : `Use the link below to view or edit your group selections for ${event.name}.`,
+      ''
+    );
+    tokens.forEach((t, idx) => {
+      textParts.push(`Signup ${idx + 1}: ${t.manageUrl}`);
+    });
+  }
   if (contactLines.length) {
     textParts.push('', 'Need help? Contact us:', ...contactLines);
   } else {
     textParts.push('', 'Need help? Reply to this email and we will help you.');
   }
-  textParts.push('', 'With gratitude,', supportName || 'Volunteer Team', '', 'If you did not request this email you can ignore it.');
+  textParts.push('', 'With gratitude,', supportName || 'Volunteer Team');
+  if (!holding) textParts.push('', 'If you did not request this email you can ignore it.');
   if (complianceFooter.textLines.length) {
     textParts.push('', ...complianceFooter.textLines);
   }
@@ -1234,11 +1292,12 @@ async function sendManageReminder(email, eventId) {
         <tr>
           <td align="center" role="presentation">
             <a href="${t.manageUrl}" style="display:inline-block; background-color:#2563eb; color:#ffffff; padding:14px 28px; font-size:15px; border-radius:999px; font-weight:600; text-decoration:none; font-family:'Segoe UI', Arial, sans-serif;" target="_blank" rel="noopener">
-              Manage Your Signup
+              ${holding ? 'Add these to my sign-up' : 'Manage Your Signup'}
             </a>
           </td>
         </tr>
       </table>
+      ${holding ? `<p style="margin:0 0 24px; color:#475569; line-height:1.7;">This opens your sign-up with these ready. Check them and press <strong>Save changes</strong> to finish. It works on any phone or computer.</p>` : ''}
       <p style="margin:0 0 12px; color:#475569; font-size:14px;">If the button doesn't work, copy and paste this URL into your browser:</p>
       <p style="margin:0 0 24px; color:#1d4ed8; font-size:14px; word-break:break-all;"><a href="${t.manageUrl}" style="color:#1d4ed8;">${t.manageUrl}</a></p>
   `;
@@ -1258,22 +1317,27 @@ async function sendManageReminder(email, eventId) {
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:640px; background-color:#ffffff; border-radius:18px; box-shadow:0 20px 38px rgba(15,23,42,0.12); overflow:hidden;" bgcolor="#ffffff">
                   <tr>
                     <td bgcolor="#2563eb" style="background-color:#2563eb; padding:28px 32px; color:#ffffff; font-family:'Segoe UI', Arial, sans-serif;">
-                      <h1 style="margin:0; font-size:24px; font-weight:700; letter-spacing:-0.01em;">Need to make an update?</h1>
+                      <h1 style="margin:0; font-size:24px; font-weight:700; letter-spacing:-0.01em;">${holding ? `Finish adding your ${spotWord}s` : 'Need to make an update?'}</h1>
                       <p style="margin:12px 0 0; font-size:15px; line-height:1.6; opacity:0.92;">
-                        ${isMulti
-                          ? `We found multiple signups for <strong>${escapeHtml(event.name)}</strong>. Use the links below to manage each one.`
-                          : `Open your manage link for <strong>${escapeHtml(event.name)}</strong> to view or edit your selections.`}
+                        ${holding
+                          ? `You picked ${heldCountText} for <strong>${escapeHtml(event.name)}</strong>. One tap adds them to your sign-up.`
+                          : isMulti
+                            ? `We found multiple signups for <strong>${escapeHtml(event.name)}</strong>. Use the links below to manage each one.`
+                            : `Open your manage link for <strong>${escapeHtml(event.name)}</strong> to view or edit your selections.`}
                       </p>
                     </td>
                   </tr>
                   <tr>
                     <td style="padding:32px; font-family:'Segoe UI', Arial, sans-serif; color:#0f172a;">
                       <p style="margin:0 0 16px; font-size:16px;">Hi ${escapeHtml(primaryReg.registrant_name || inputEmail)},</p>
-                      <p style="margin:0 0 24px; color:#475569; line-height:1.7;">
+                      ${holding
+                        ? `<p style="margin:0 0 12px; color:#475569; line-height:1.7;">This email already has a sign-up, so we’re holding these for you:</p>
+                      <ul style="padding-left:20px; margin:0 0 24px; color:#0f172a; line-height:1.7;">${held.map(h => `<li>${escapeHtml(heldLine(h))}</li>`).join('')}</ul>`
+                        : `<p style="margin:0 0 24px; color:#475569; line-height:1.7;">
                         ${isMulti
                           ? 'Use the manage links below to view or edit each signup.'
                           : 'Use the button below to access your personal manage page.'}
-                      </p>
+                      </p>`}
                       ${isMulti
                         ? `<ul style="padding-left:18px; margin:0 0 24px; list-style:disc;">${multiListHtml}</ul>`
                         : singleHtmlBlock(tokens[0])}
@@ -1291,7 +1355,9 @@ async function sendManageReminder(email, eventId) {
                   </tr>
                   <tr>
                     <td bgcolor="#f3f6fb" style="background-color:#f3f6fb; padding:18px 32px; text-align:center; color:#94a3b8; font-size:13px; font-family:'Segoe UI', Arial, sans-serif;">
-                      If you did not request this email you can ignore it.
+                      ${holding
+                        ? 'Didn’t pick these? Just ignore this email — nothing changes.'
+                        : 'If you did not request this email you can ignore it.'}
                     </td>
                   </tr>
                 </table>
@@ -1311,7 +1377,8 @@ async function sendManageReminder(email, eventId) {
   return {
     registrations,
     tokens,
-    manageUrls: tokens.map(t => t.manageUrl)
+    manageUrls: tokens.map(t => t.manageUrl),
+    heldCount: held.length
   };
 }
 
@@ -1405,7 +1472,7 @@ module.exports = {
   getCalendarLinks,
   updateVolunteerSignup,
   sendManageReminder,
-  checkDuplicateRegistration,
+  getHeldPicks,
   updateEmailPreference,
   renameParticipant,
   addParticipant,
