@@ -1120,30 +1120,6 @@
 
     const submitBtn = form.querySelector('button[type="submit"]');
     if (submitBtn) submitBtn.disabled = true;
-    try {
-      const csrf = form.querySelector('input[name="_csrf"]');
-      const resp = await fetch('/manage/check-duplicate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({
-          eventId: cfg.eventId,
-          email: String(emailInput.value || '').trim(),
-          _csrf: csrf ? csrf.value : '',
-          payload: buildPayload()
-        })
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        if (data && data.duplicate) {
-          if (submitBtn) submitBtn.disabled = false;
-          clearLocalDraft();
-          showError('This email already has a sign-up for this event. We just emailed you a link — open it in this browser to see what you already have, with these picks waiting for you to review and save.', emailInput);
-          return;
-        }
-      }
-    } catch (err) {
-      console.warn('[Signup] Duplicate check failed; submitting anyway.', err);
-    }
     submitting = true;
     clearLocalDraft();
     form.submit();

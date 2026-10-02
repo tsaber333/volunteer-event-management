@@ -83,8 +83,6 @@ router.post('/manage/remind', async (req, res) => {
 });
 
 // Duplicate check (AJAX) for step 1: if a registration already exists, send manage link.
-router.post('/manage/check-duplicate', publicController.checkDuplicateRegistration);
-
 // Manage existing signup via emailed token
 router.get('/manage/:token', publicController.showManageSignup);
 router.get('/manage/:token/calendar.ics', publicController.downloadCalendar);

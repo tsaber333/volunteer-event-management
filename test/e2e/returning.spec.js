@@ -25,8 +25,6 @@ test('typing someone else’s email never opens their sign-up', async ({ page, b
 
   const strangerCtx = await browser.newContext();
   const stranger = await strangerCtx.newPage();
-  // Skip the page's own email check, as anyone could.
-  await stranger.route('**/manage/check-duplicate', route => route.abort());
   await stranger.goto(`/events/${events.serve}`);
   await signUpFor(stranger, blocks.kitchen930);
   await fillContact(stranger, { name: 'Mallory', email: 'vera@example.test' });
@@ -41,26 +39,42 @@ test('typing someone else’s email never opens their sign-up', async ({ page, b
   await strangerCtx.close();
 });
 
-test('signing up again with the same email keeps your new picks for the manage link', async ({ page, browser }) => {
+test('signing up again with the same email emails an “Add these to my sign-up” button that works on any device', async ({ page, browser }) => {
   const { events, blocks } = ids();
   await quickSignup(page, { eventId: events.serve, blockIds: [blocks.setup8], name: 'Sam Same', email: 'sam@example.test' });
 
-  const otherDevice = await browser.newContext();
-  const phone = await otherDevice.newPage();
+  const phoneCtx = await browser.newContext();
+  const phone = await phoneCtx.newPage();
   await phone.goto(`/events/${events.serve}`);
   await signUpFor(phone, blocks.greeters10);
   await fillContact(phone, { name: 'Sam Same', email: 'sam@example.test' });
   await confirm(phone);
-  await expect(phone.locator('[data-role="form-error"]')).toContainText('This email already has a sign-up for this event.');
+  await expect(phone.getByRole('heading', { name: 'You already have a sign-up for this event' })).toBeVisible();
+  await expect(phone.getByRole('heading', { name: 'Check your email to finish' })).toBeVisible();
+  await expect(phone.locator('main')).toContainText('Your 1 new spot will be ready');
+  await phoneCtx.close();
 
-  const reminder = await waitForEmail('sam@example.test', /^Manage your signup for Serve Day/);
-  await phone.goto(manageLinkIn(reminder));
-  await expect(phone.locator('[data-role="pending-note"]')).toContainText('We added 1 spot you picked.');
-  const newPick = phone.locator(`[data-role="picks-list"] .pick-group[data-block-id="${blocks.greeters10}"]`);
+  const email = await waitForEmail('sam@example.test', /^Add your new spots to your sign-up for Serve Day/);
+  expect(email.text).toContain('You picked 1 spot for Serve Day');
+  expect(email.text).toMatch(/- Greeters — .+ — Sam Same/);
+  expect(email.text).toContain('Add these to my sign-up: http');
+  expect(email.html).toContain('Add these to my sign-up');
+
+  // A different browser from the one that made the picks.
+  const laptopCtx = await browser.newContext();
+  const laptop = await laptopCtx.newPage();
+  const link = manageLinkIn(email);
+  await laptop.goto(link);
+  await expect(laptop.locator('[data-role="pending-note"]')).toContainText('We added 1 spot you picked.');
+  const newPick = laptop.locator(`[data-role="picks-list"] .pick-group[data-block-id="${blocks.greeters10}"]`);
   await expect(newPick).toContainText('New');
 
-  await phone.getByRole('button', { name: 'Save changes' }).click();
-  await expect(phone.getByText('Your volunteer schedule has been updated.').first()).toBeVisible();
-  await expect(phone.locator('#your-signups [data-role="picks-count"]')).toHaveText('(2)');
-  await otherDevice.close();
+  await laptop.getByRole('button', { name: 'Save changes' }).click();
+  await expect(laptop.getByText('Your volunteer schedule has been updated.').first()).toBeVisible();
+  await expect(laptop.locator('#your-signups [data-role="picks-count"]')).toHaveText('(2)');
+
+  await laptop.goto(link);
+  await expect(laptop.locator('#your-signups [data-role="picks-count"]')).toHaveText('(2)');
+  await expect(laptop.locator('[data-role="pending-note"]')).not.toBeVisible();
+  await laptopCtx.close();
 });

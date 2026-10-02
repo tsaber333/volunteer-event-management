@@ -157,10 +157,15 @@ body.app-shell {
   width: 100%;
 }
 
-.app-shell.is-public .page-shell {
+.app-shell.is-public .page-shell,
+.app-shell.is-public .notice-wrapper {
   width: min(100%, var(--layout-max));
   padding-inline: clamp(20px, 6vw, 108px);
   box-sizing: border-box;
+}
+
+.app-shell.is-public .notice-wrapper {
+  margin-block: 0.75rem 1.25rem;
 }
 
 .app-shell.is-admin .page-shell,
@@ -2403,7 +2408,7 @@ details.dropdown[open] > summary { opacity: 0.9; }
 
 .notice__title {
   font-weight: 700;
-  margin-bottom: 0.5rem;
+  margin: 0 0 0.5rem;
 }
 
 .notice__list {

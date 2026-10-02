@@ -6,7 +6,7 @@
   <div>
     <% if (alreadyRegistered) { %>
       <h1>You already have a sign-up for this event</h1>
-      <p class="page-subtitle">We emailed your manage link to <strong><%= volunteerEmail %></strong>.</p>
+      <p class="page-subtitle">We sent an email to <strong><%= volunteerEmail %></strong>.</p>
     <% } else { %>
       <h1>Thank you for signing up!</h1>
       <p class="page-subtitle">A confirmation email is on its way to <strong><%= volunteerEmail %></strong>.</p>
@@ -17,8 +17,14 @@
 <section class="page-section page-shell">
   <article class="card card--plain my-signup">
     <% if (alreadyRegistered) { %>
-      <h2 class="my-signup__title">Open the link in your email</h2>
-      <p>It shows what you already have for this event. If you open it in this browser, the spots you just picked will be waiting there for you to review and save. Can’t find it? Check your junk or spam folder.</p>
+      <% if (locals.heldCount) { %>
+        <h2 class="my-signup__title">Check your email to finish</h2>
+        <p>Open the email and tap <strong>Add these to my sign-up</strong>. Your <%= heldCount %> new <%= heldCount === 1 ? 'spot' : 'spots' %> will be ready — just press <strong>Save changes</strong>. It works on your phone or computer.</p>
+      <% } else { %>
+        <h2 class="my-signup__title">Open the link in your email</h2>
+        <p>It shows what you already have for this event, and you can add more spots there.</p>
+      <% } %>
+      <p class="muted small">Can’t find it? Check your junk or spam folder.</p>
     <% } else { %>
       <h2 class="my-signup__title">You’re all set<%= eventName ? ` for ${eventName}` : '' %></h2>
       <p class="muted">You reserved <strong><%= count %></strong> <%= count === 1 ? 'spot' : 'spots' %>:</p>
