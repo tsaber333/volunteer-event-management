@@ -141,6 +141,15 @@
     return `${who} already signed up for ${conflict.stationName} at this time.`;
   }
 
+  function busySentence(people, stationName) {
+    const me = people.some(p => p.isRegistrant);
+    const names = people.filter(p => !p.isRegistrant).map(p => personName(p) || 'Someone');
+    if (me && !names.length) return `You’re already signed up for ${stationName} at this time.`;
+    const all = me ? ['You', ...names] : names;
+    const shown = all.length > 4 ? [...all.slice(0, 3), `${all.length - 3} others`] : all;
+    return `${joinNames(shown)} ${all.length > 1 ? 'are' : 'is'} already signed up for ${stationName} at this time.`;
+  }
+
   function remaining(blockId) {
     const slot = slots.get(blockId);
     if (!slot) return 0;
@@ -464,15 +473,21 @@
 
       const note = el.querySelector('[data-role="note"]');
       if (note && checkOverlap) {
-        const busy = (full && !here.length) ? [] : activePeople()
-          .filter(p => !here.some(h => h.personKey === p.key))
-          .map(p => {
-            const r = conflictFor(p.key, slot.id, null);
-            return r && r.type === 'overlap' ? conflictSentence(p, r) : '';
-          })
-          .filter(Boolean);
-        note.textContent = busy.join(' ');
-        note.hidden = !busy.length;
+        // One sentence per other station: "You, Ann and Bo are already signed up for …".
+        const busyAt = new Map();
+        if (!(full && !here.length)) {
+          activePeople()
+            .filter(p => !here.some(h => h.personKey === p.key))
+            .forEach(p => {
+              const r = conflictFor(p.key, slot.id, null);
+              if (!r || r.type !== 'overlap') return;
+              if (!busyAt.has(r.stationName)) busyAt.set(r.stationName, []);
+              busyAt.get(r.stationName).push(p);
+            });
+        }
+        const sentences = Array.from(busyAt, ([stationName, people]) => busySentence(people, stationName));
+        note.textContent = sentences.join(' ');
+        note.hidden = !sentences.length;
       }
 
       const addBtn = el.querySelector('[data-role="add"]');
@@ -690,8 +705,8 @@
     return r.top < window.innerHeight && r.bottom > 0;
   }
 
-  // Wide screens pin Step 2 beside the list (CSS); narrower ones open it as a
-  // bottom sheet from the picks bar. Keep the width in sync with style.css.
+  // The picks bar scrolls to Step 2 below the list on wide screens and opens
+  // it as a bottom sheet on narrower ones. Keep the width in sync with style.css.
   const wideQuery = !isManage && window.matchMedia ? window.matchMedia('(min-width: 1100px)') : null;
   const sheetClose = document.querySelector('[data-role="sheet-close"]');
   const stepHeading = document.getElementById('signup-step-heading');
@@ -772,14 +787,14 @@
       show = isDirty() && !isInView(form);
       if (barText) barText.textContent = 'You have unsaved changes';
     } else {
-      show = picks.length > 0 && !sheetOpen && !isWide() && !isInView(form);
+      show = picks.length > 0 && !sheetOpen && !isInView(form);
       if (barText) barText.textContent = `${picks.length} ${picks.length === 1 ? spotWord : spotWord + 's'} picked`;
     }
     bar.hidden = !show;
   }
   if (barGo) {
     barGo.addEventListener('click', () => {
-      if (!isManage && stepSection) { openSheet(); return; }
+      if (!isManage && stepSection && !isWide()) { openSheet(); return; }
       const target = stepSection || form;
       target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });

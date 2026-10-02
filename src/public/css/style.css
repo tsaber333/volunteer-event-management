@@ -3945,52 +3945,12 @@ button.group-chip { cursor: pointer; }
 .picks-bar__text { font-weight: 700; white-space: nowrap; }
 .picks-bar .btn { border-radius: 999px; }
 
-/* Step 2: pinned beside the list on wide screens, bottom sheet on smaller ones.
-   The 1100px breakpoint is mirrored in signup.js. */
+/* Step 2: below the list on wide screens (the picks bar scrolls to it), bottom
+   sheet on smaller ones. The 1100px breakpoint is mirrored in signup.js. */
 .signup-step__head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
 .signup-step__head .step-heading:focus { outline: none; }
 .signup-step__close[hidden] { display: none; }
 
-@media (min-width: 1100px) {
-  .app-shell .signup-layout--with-panel {
-    width: min(100%, var(--layout-max));
-    padding-inline: clamp(20px, 6vw, 108px);
-    box-sizing: border-box;
-    margin-inline: auto;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 340px;
-    gap: 1.5rem;
-    align-items: start;
-  }
-  .app-shell .signup-layout--with-panel > .page-shell { width: auto; margin-inline: 0; padding-inline: 0; }
-  .signup-layout--with-panel > .signup-step {
-    position: sticky;
-    top: calc(var(--sticky-top) + 0.75rem);
-    max-height: calc(100vh - var(--sticky-top) - 1.5rem);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    margin-bottom: 0;
-    scrollbar-width: thin;
-  }
-  .signup-layout--with-panel > .signup-step .step-heading { margin-top: 0.25rem; }
-  .signup-layout--with-panel .signup-panel { padding: 1rem 1rem 0; gap: 0.9rem; }
-  .signup-layout--with-panel .signup-panel > [data-role="picks-empty"] { margin-bottom: 1rem; }
-  .signup-layout--with-panel .signup-panel .form-grid { gap: 0.6rem; }
-  .signup-layout--with-panel .signup-panel .form-grid.two { grid-template-columns: 1fr; }
-  .signup-layout--with-panel .signup-fieldset { margin-bottom: 0.9rem; }
-  .signup-layout--with-panel .pick-group__head { flex-direction: column; gap: 0; }
-  .signup-layout--with-panel .pick:has(.pick__dish) { grid-template-columns: minmax(0, 1fr) auto; }
-  .signup-layout--with-panel .pick:has(.pick__dish) .pick__who { grid-column: 1 / -1; }
-  .signup-layout--with-panel > .signup-step .card-actions {
-    position: sticky;
-    bottom: 0;
-    z-index: 1;
-    margin: 0 -1rem;
-    padding: 0.7rem 1rem 1rem;
-    background: var(--surface);
-    border-top: 1px solid var(--border-soft);
-  }
-}
 .signup-step.is-sheet .card-actions {
   position: sticky;
   bottom: 0;
