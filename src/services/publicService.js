@@ -1041,7 +1041,7 @@ function buildSignupSummary(event, participants) {
   return { total, people, byBlock, conflicts };
 }
 
-async function updateVolunteerSignup(token, scheduleAssignments, potluckAssignments, options = {}) {
+async function updateVolunteerSignup(token, scheduleAssignments, potluckAssignments) {
   const context = getManageContext(token);
   if (!context) throw createError(410, 'This link has expired or is no longer valid.');
 
@@ -1139,14 +1139,12 @@ async function updateVolunteerSignup(token, scheduleAssignments, potluckAssignme
   const finalSched = normalizedSched.map(s => ({ blockId: s.blockId, participantId: toParticipantId(s.personKey) }));
   const finalPot = normalizedPot.map(p => ({ itemId: p.itemId, participantId: toParticipantId(p.personKey), dishName: p.dishName }));
 
-  let replaceResult;
   try {
-    replaceResult = dal.public.replaceRegistrationAssignments(
+    dal.public.replaceRegistrationAssignments(
       registration.registration_id,
       registration.event_id,
       finalSched,
-      finalPot,
-      { debugCapacity: options.debugCapacity }
+      finalPot
     );
   } catch (err) {
     createdIds.forEach(pid => { try { dal.public.deleteParticipant(registration.registration_id, pid, true); } catch (_) {} });
@@ -1160,7 +1158,6 @@ async function updateVolunteerSignup(token, scheduleAssignments, potluckAssignme
       registration: null,
       event,
       participants: [],
-      debug: replaceResult && replaceResult.debug,
       deleted: true,
       eventId: event.event_id
     };
@@ -1180,7 +1177,7 @@ async function updateVolunteerSignup(token, scheduleAssignments, potluckAssignme
     isUpdate: true
   });
 
-  return { registration, event, participants, debug: replaceResult && replaceResult.debug };
+  return { registration, event, participants };
 }
 
 async function sendManageReminder(email, eventId, options = {}) {

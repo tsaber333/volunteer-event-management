@@ -269,8 +269,6 @@ exports.showManageSignup = (req, res, next) => {
             volunteerEmail: registration.registrant_email || ''
         };
 
-        const debugCapacity = String(req.query.debug || '').toLowerCase() === 'capacity';
-
         res.render('public/manage-signup', {
             title: `Manage ${event.name}`,
             event,
@@ -282,8 +280,7 @@ exports.showManageSignup = (req, res, next) => {
             calendar: publicService.getCalendarLinks({ event, participants, registrationId: registration.registration_id, token }),
             helpers,
             emailPreferences,
-            query: req.query,
-            debugCapacity
+            query: req.query
         });
     } catch (error) {
         console.error('--- ERROR IN showManageSignup ---', error);
@@ -316,7 +313,6 @@ exports.downloadCalendar = (req, res, next) => {
 exports.updateManageSignup = async (req, res, next) => {
   const token = req.params.token;
   const action = req.body.action || '';
-  const debugCapacity = String(req.query.debug || '').toLowerCase() === 'capacity';
 
   try {
     if (action === 'rename') {
@@ -350,25 +346,17 @@ exports.updateManageSignup = async (req, res, next) => {
     const scheduleAssignments = payload.scheduleAssignments || [];
     const potluckAssignments = payload.potluckAssignments || [];
 
-    const result = await publicService.updateVolunteerSignup(token, scheduleAssignments, potluckAssignments, { debugCapacity });
-    if (debugCapacity && result && result.debug) {
-      req.flash('debug', JSON.stringify(result.debug, null, 2));
-    }
+    const result = await publicService.updateVolunteerSignup(token, scheduleAssignments, potluckAssignments);
     if (result && result.deleted) {
       forgetSignup(res, result.eventId);
       req.flash('success', 'Your selections have been cleared.');
       return res.redirect(result.eventId ? `/events/${result.eventId}` : '/events');
     }
     req.flash('success', 'Your volunteer schedule has been updated. Check your email for confirmation.');
-    res.redirect(`/manage/${token}${debugCapacity ? '?debug=capacity' : ''}`);
+    res.redirect(`/manage/${token}`);
   } catch (error) {
     console.error('--- ERROR IN updateManageSignup ---', error);
     req.flash('error', error.message || 'Unable to update your schedule.');
-    if (debugCapacity && error && error.debug) {
-      try {
-        req.flash('debug', JSON.stringify(error.debug, null, 2));
-      } catch (_) {}
-    }
     if (process.env.DEBUG_SIGNUP === '1' || process.env.NODE_ENV !== 'production') {
       const debugBlob = {
         token,
@@ -381,7 +369,7 @@ exports.updateManageSignup = async (req, res, next) => {
     if (error.status === 410) {
       return res.redirect('/events');
     }
-    res.redirect(`/manage/${token}${debugCapacity ? '?debug=capacity' : ''}`);
+    res.redirect(`/manage/${token}`);
   }
 };
 
