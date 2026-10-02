@@ -695,14 +695,12 @@ async function processVolunteerSignup(payload) {
     // best-effort merge; continue
   }
   const existingRegs = dal.public.findRegistrationsByEmail(eventId, registrant.email) || [];
+  // The manage link goes to the email owner only, never back to the submitter.
   if (existingRegs.length) {
-    const reminder = await sendManageReminder(registrant.email, eventId);
-    const firstManageUrl = reminder && Array.isArray(reminder.manageUrls) && reminder.manageUrls[0];
+    await sendManageReminder(registrant.email, eventId);
     return {
       registrationId: existingRegs[0].registration_id,
       eventId,
-      token: reminder && reminder.tokens && reminder.tokens[0] ? reminder.tokens[0].token : undefined,
-      manageUrl: firstManageUrl,
       alreadyRegistered: true
     };
   }
@@ -858,8 +856,6 @@ async function processVolunteerSignup(payload) {
     return {
       registrationId,
       eventId,
-      token,
-      manageUrl,
       alreadyRegistered: true
     };
   }

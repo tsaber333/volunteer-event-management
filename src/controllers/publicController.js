@@ -227,7 +227,9 @@ exports.handleSignup = async (req, res, next) => {
       if (result.alreadyRegistered) {
         stashPendingPicks(req, payload.eventId, picksFromPayload(payload));
       }
-      if (result.token) rememberSignup(res, payload.eventId, result.token);
+      // Anyone can type any email, so only a brand-new sign-up is remembered on
+      // this device; an existing one is reached through the emailed link only.
+      if (result.token && !result.alreadyRegistered) rememberSignup(res, payload.eventId, result.token);
       const evt = publicService.getEventDetailsForPublic(payload.eventId);
       const summary = (evt && result.participants)
         ? publicService.buildSignupSummary(evt, result.participants)

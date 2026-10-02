@@ -151,6 +151,7 @@ const apiLimiter = rateLimit({
 });
 app.use('/signup', apiLimiter);
 app.use('/manage/remind', apiLimiter);
+app.use('/manage/check-duplicate', apiLimiter);
 
 app.use('/', publicRoutes);
 app.use('/admin', adminRoutes);
