@@ -13,12 +13,19 @@ test('sign yourself up for a spot', async ({ page }) => {
   await expect(page.locator('.toast')).toContainText('Added Greeters');
   await expect(slot(page, blocks.greeters9).locator('[data-role="picked"]')).toContainText('✓ Added');
 
-  // Wide screens keep Step 2 beside the list.
+  // On a computer, Step 2 is below the list and the bar scrolls to it.
+  const bar = page.locator('[data-role="picks-bar"]');
+  await expect(bar).toContainText('1 spot picked');
   const step = page.locator('#signup-step');
-  const list = await page.locator('#positions').boundingBox();
-  const panel = await step.boundingBox();
-  expect(panel.x).toBeGreaterThan(list.x + list.width / 2);
-  await expect(step).toHaveCSS('position', 'sticky');
+  const [listBottom, stepTop] = await page.evaluate(() => [
+    document.querySelector('#positions').getBoundingClientRect().bottom,
+    document.querySelector('#signup-step').getBoundingClientRect().top
+  ]);
+  expect(stepTop).toBeGreaterThanOrEqual(listBottom);
+  await bar.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByRole('heading', { name: 'Step 2: Review and confirm' })).toBeInViewport();
+  await expect(step).not.toHaveClass(/is-sheet/);
+  await expect(bar).toBeHidden();
 
   await fillContact(page, { name: 'Ann Tester', email: 'ann@example.test' });
   await expect(pickGroup(page, blocks.greeters9).locator('.pick-chip')).toHaveText(/Me \(Ann Tester\)/);
@@ -107,6 +114,23 @@ test('one person can’t take overlapping times', async ({ page }) => {
   await chooser.getByLabel('Name of someone else taking Kitchen', { exact: false }).fill('Other Helper');
   await chooser.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(pickGroup(page, blocks.kitchen930).locator('.pick-chip')).toHaveText(/Other Helper/);
+});
+
+test('a busy group gets one combined note per station', async ({ page }) => {
+  const { events, blocks } = ids();
+  await page.goto(`/events/${events.serve}`);
+  for (const name of ['Ann', 'Bo']) {
+    await page.getByRole('button', { name: '+ Add person' }).click();
+    await page.getByLabel('Name of the person to add to your group').fill(name);
+    await page.getByRole('button', { name: 'Add', exact: true }).click();
+  }
+  await signUpFor(page, blocks.greeters9);
+  const chooser = slot(page, blocks.greeters9).locator('.slot__chooser');
+  for (const name of ['Me', 'Ann', 'Bo']) await chooser.getByRole('checkbox', { name }).check();
+  await chooser.getByRole('button', { name: 'Add', exact: true }).click();
+
+  await expect(slot(page, blocks.kitchen930).locator('[data-role="note"]'))
+    .toHaveText('You, Ann and Bo are already signed up for Greeters at this time.');
 });
 
 test('overlapping times are fine when the event allows it', async ({ page }) => {
