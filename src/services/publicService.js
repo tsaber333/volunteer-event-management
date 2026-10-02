@@ -290,6 +290,7 @@ function mergeRegistrationsForEmail(eventId, email, primaryIdHint) {
   );
   // Remove extras after successful merge so capacity math was accurate but data is consolidated.
   extras.forEach(reg => {
+    dal.public.moveRegistrationTokens(reg.registration_id, primary.registration_id);
     try { dal.public.deleteRegistrationCascade(reg.registration_id); } catch (_) {}
   });
   try { dal.public.deleteEmptyRegistrations(eventId, email); } catch (_) {}
@@ -935,8 +936,8 @@ function getManageContext(token) {
   const registration = dal.public.getRegistrationByToken(token);
   if (!registration) return null;
 
-  if (registration.manage_token_expires_at) {
-    const expiry = new Date(registration.manage_token_expires_at);
+  if (registration.token_expires_at) {
+    const expiry = new Date(registration.token_expires_at);
     if (Number.isFinite(expiry.getTime()) && expiry.getTime() < Date.now()) {
       return null;
     }

@@ -39,6 +39,32 @@ test('typing someone else’s email never opens their sign-up', async ({ page, b
   await strangerCtx.close();
 });
 
+test('emailing a new link keeps earlier links and this device’s sign-up working', async ({ page, browser }) => {
+  const { events, blocks } = ids();
+  const firstLink = await quickSignup(page, { eventId: events.serve, blockIds: [blocks.kitchen930], name: 'Lena Links', email: 'lena@example.test' });
+
+  // Anyone can ask for Lena's link to be emailed to her.
+  const otherCtx = await browser.newContext();
+  const other = await otherCtx.newPage();
+  await other.goto(`/events/${events.serve}`);
+  await other.getByText('Already signed up? See what you have').click();
+  await other.locator('#remind-email').fill('lena@example.test');
+  await other.getByRole('button', { name: 'Email me my link' }).click();
+  await expect(other.getByText(/we sent a manage link/i).first()).toBeVisible();
+  await otherCtx.close();
+
+  const email = await waitForEmail('lena@example.test', /^Manage your signup for Serve Day/);
+  const newLink = manageLinkIn(email);
+  expect(newLink).not.toBe(firstLink);
+
+  for (const link of [firstLink, newLink]) {
+    await page.goto(link);
+    await expect(page.locator('#your-signups [data-role="picks-count"]')).toHaveText('(1)');
+  }
+  await page.goto(`/events/${events.serve}`);
+  await expect(page.getByRole('heading', { name: 'You’re signed up, Lena!' })).toBeVisible();
+});
+
 test('signing up again with the same email emails an “Add these to my sign-up” button that works on any device', async ({ page, browser }) => {
   const { events, blocks } = ids();
   await quickSignup(page, { eventId: events.serve, blockIds: [blocks.setup8], name: 'Sam Same', email: 'sam@example.test' });
