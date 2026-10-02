@@ -261,7 +261,7 @@
     chip.className = 'pick-chip';
     chip.dataset.uid = String(pick.uid);
     const name = document.createElement('span');
-    name.textContent = personLabel(person);
+    name.textContent = personLabel(person) || 'Choose who';
     chip.appendChild(name);
     if (isManage && !pick.saved) {
       const tag = document.createElement('span');
@@ -273,7 +273,7 @@
     remove.type = 'button';
     remove.className = 'pick-chip__remove';
     remove.textContent = '×';
-    remove.setAttribute('aria-label', `Remove ${personLabel(person)} from ${slot ? slot.label : spotWord}`);
+    remove.setAttribute('aria-label', `Remove ${personLabel(person) || 'this pick'} from ${slot ? slot.label : spotWord}`);
     remove.addEventListener('click', () => {
       removePick(pick.uid);
       refresh();
@@ -434,11 +434,6 @@
   }
 
   // ---- Rendering: positions ---------------------------------------------
-  function describePeople(list) {
-    const names = list.map(p => personLabel(p) || 'Someone').filter(Boolean);
-    return names.join(', ');
-  }
-
   function renderSlots() {
     slots.forEach(slot => {
       const el = slot.el;
@@ -457,18 +452,19 @@
         fill.style.width = `${Math.min(100, Math.round(((slot.capacity - Math.max(left, 0)) / slot.capacity) * 100))}%`;
       }
 
+      // Each person is a chip with its own ×, so anyone can be taken off.
       const mine = el.querySelector('[data-role="mine"]');
       if (mine) {
-        const names = describePeople(here.map(p => personByKey(p.personKey)).filter(Boolean));
-        const unassigned = here.filter(p => !p.personKey).length;
-        let text = '';
-        if (here.length) {
-          text = isManage ? 'Your group: ' : 'Your picks: ';
-          text += names || '';
-          if (unassigned) text += `${names ? ', ' : ''}${unassigned} to assign`;
-        }
-        mine.textContent = text;
+        mine.textContent = '';
         mine.hidden = !here.length;
+        if (here.length) {
+          const label = document.createElement('span');
+          label.textContent = isManage ? 'Your group:' : 'Your picks:';
+          const chips = document.createElement('span');
+          chips.className = 'pick-chips';
+          here.forEach(p => chips.appendChild(buildPickChip(p, slot)));
+          mine.append(label, chips);
+        }
       }
 
       const note = el.querySelector('[data-role="note"]');
@@ -511,22 +507,8 @@
       const picked = el.querySelector('[data-role="picked"]');
       if (picked) {
         const newHere = here.filter(p => !p.saved);
-        picked.textContent = '';
         picked.hidden = !newHere.length;
-        if (newHere.length) {
-          const label = document.createElement('span');
-          label.textContent = newHere.length > 1 ? `✓ Added ×${newHere.length}` : '✓ Added';
-          const undo = document.createElement('button');
-          undo.type = 'button';
-          undo.className = 'btn btn-link small';
-          undo.textContent = 'Undo';
-          undo.addEventListener('click', () => {
-            removePick(newHere[newHere.length - 1].uid);
-            refresh();
-          });
-          picked.appendChild(label);
-          picked.appendChild(undo);
-        }
+        picked.textContent = newHere.length > 1 ? `✓ Added ×${newHere.length}` : (newHere.length ? '✓ Added' : '');
       }
 
       el.classList.toggle('is-full', full);

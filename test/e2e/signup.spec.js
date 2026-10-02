@@ -78,6 +78,31 @@ test('sign up yourself and a family member', async ({ page }) => {
   await expect(page.locator('.my-signup__list')).toContainText('Kid Tester');
 });
 
+test('anyone in the group can be taken off a spot, not just the last one added', async ({ page }) => {
+  const { events, blocks } = ids();
+  await page.goto(`/events/${events.serve}`);
+  for (const name of ['Ann Able', 'Bo Baker']) {
+    await page.getByRole('button', { name: '+ Add person' }).click();
+    await page.getByLabel('Name of the person to add to your group').fill(name);
+    await page.getByRole('button', { name: 'Add', exact: true }).click();
+  }
+
+  await signUpFor(page, blocks.setup8);
+  const chooser = slot(page, blocks.setup8).locator('.slot__chooser');
+  for (const name of ['Me', 'Ann Able', 'Bo Baker']) await chooser.getByRole('checkbox', { name }).check();
+  await chooser.getByRole('button', { name: 'Add', exact: true }).click();
+
+  const mine = slot(page, blocks.setup8).locator('[data-role="mine"]');
+  await expect(mine.locator('.pick-chip')).toHaveCount(3);
+  await expect(slot(page, blocks.setup8).locator('[data-role="picked"]')).toHaveText('✓ Added ×3');
+
+  await mine.getByRole('button', { name: /^Remove Me/ }).click();
+  await mine.getByRole('button', { name: /^Remove Ann Able/ }).click();
+  await expect(mine.locator('.pick-chip')).toHaveText([/Bo Baker/]);
+  await expect(slot(page, blocks.setup8).locator('[data-role="picked"]')).toHaveText('✓ Added');
+  await expect(pickGroup(page, blocks.setup8).locator('.pick-chip')).toHaveText([/Bo Baker/]);
+});
+
 test('sign up only someone else', async ({ page }) => {
   const { events, blocks } = ids();
   await page.goto(`/events/${events.serve}`);

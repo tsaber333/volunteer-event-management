@@ -3756,6 +3756,8 @@ button.group-chip { cursor: pointer; }
 .slot__mine { color: var(--success); }
 .slot__note { color: #92400e; }
 .slot__mine[hidden], .slot__note[hidden] { display: none; }
+.slot__mine:has(.pick-chips) { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.35rem; }
+.slot__mine .pick-chip { font-size: 0.85rem; }
 
 .slot__others { font-size: 0.86rem; color: var(--text-muted); }
 .slot__others summary { cursor: pointer; font-weight: 600; color: var(--brand-strong); }
