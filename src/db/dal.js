@@ -97,6 +97,28 @@ try { db.prepare(`ALTER TABLE registrations ADD COLUMN manage_token_expires_at T
 try { db.prepare(`ALTER TABLE registrations ADD COLUMN email_opt_in INTEGER NOT NULL DEFAULT 1`).run(); } catch (_) {}
 try { db.prepare(`ALTER TABLE registrations ADD COLUMN email_opted_out_at TEXT`).run(); } catch (_) {}
 try { db.prepare(`ALTER TABLE registrations ADD COLUMN email_opt_out_reason TEXT`).run(); } catch (_) {}
+// A sign-up can have several working manage links (each email sends one), so
+// sending a new link never cancels the ones already in someone's inbox.
+// registrations.manage_token_hash still holds the newest link for rollback.
+try {
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS registration_tokens (
+      token_hash TEXT PRIMARY KEY,
+      registration_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      expires_at TEXT,
+      FOREIGN KEY (registration_id) REFERENCES registrations(registration_id) ON DELETE CASCADE
+    )
+  `).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_registration_tokens_registration ON registration_tokens(registration_id)`).run();
+  db.prepare(`
+    INSERT OR IGNORE INTO registration_tokens (token_hash, registration_id, expires_at)
+    SELECT manage_token_hash, registration_id, manage_token_expires_at
+    FROM registrations
+    WHERE manage_token_hash IS NOT NULL
+  `).run();
+} catch (_) { /* already exists */ }
+
 // Picks from a sign-up attempt with an already-registered email, waiting for
 // the owner to add them from the emailed link.
 try { db.prepare(`ALTER TABLE registrations ADD COLUMN held_picks TEXT`).run(); } catch (_) {}
@@ -173,6 +195,8 @@ function mapRun(res) {
 function hashToken(token) {
   return crypto.createHash('sha256').update(String(token || ''), 'utf8').digest('hex');
 }
+
+const MAX_TOKENS_PER_REGISTRATION = 25;
 
 function cleanupExpiredTokens() {
   try {
@@ -1753,18 +1777,20 @@ const publicDal = {
 
   getRegistrationByToken: (token) => {
     const hashed = hashToken(token);
-    let row = db.prepare(`
+    const row = db.prepare(`
       SELECT
         r.*,
+        t.expires_at AS token_expires_at,
         e.name AS event_name,
         e.date_start,
         e.date_end,
         COALESCE(e.signup_mode, 'schedule') AS signup_mode,
         e.publish_state,
         e.is_published
-      FROM registrations r
+      FROM registration_tokens t
+      JOIN registrations r ON r.registration_id = t.registration_id
       JOIN events e ON e.event_id = r.event_id
-      WHERE r.manage_token_hash = ?
+      WHERE t.token_hash = ?
     `).get(hashed);
 
     if (row) return row;
@@ -1788,25 +1814,54 @@ const publicDal = {
         LIMIT 1
       `).get(legacy.event_id, legacy.volunteer_email);
       if (reg) {
-        try {
-          db.prepare(`UPDATE registrations SET manage_token_hash = ?, manage_token_expires_at = ? WHERE registration_id = ?`)
-            .run(hashed, legacy.expires_at || null, reg.registration_id);
-        } catch (_) {}
-        return reg;
+        try { publicDal.storeRegistrationToken(token, reg.registration_id, legacy.expires_at || null); } catch (_) {}
+        return { ...reg, token_expires_at: legacy.expires_at || null };
       }
     }
 
     return null;
   },
 
+  // Adds the link (or refreshes its expiry) without touching the sign-up's
+  // other links. Expired links are dropped, and only the newest
+  // MAX_TOKENS_PER_REGISTRATION are kept.
   storeRegistrationToken: (token, registrationId, expiresAt) => {
     const hashed = hashToken(token);
-    db.prepare(`
-      UPDATE registrations
-      SET manage_token_hash = ?, manage_token_expires_at = ?
-      WHERE registration_id = ?
-    `).run(hashed, expiresAt || null, registrationId);
+    db.transaction(() => {
+      db.prepare(`
+        INSERT INTO registration_tokens (token_hash, registration_id, expires_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(token_hash) DO UPDATE SET
+          registration_id = excluded.registration_id,
+          expires_at = excluded.expires_at
+      `).run(hashed, registrationId, expiresAt || null);
+      db.prepare(`
+        UPDATE registrations
+        SET manage_token_hash = ?, manage_token_expires_at = ?
+        WHERE registration_id = ?
+      `).run(hashed, expiresAt || null, registrationId);
+      db.prepare(`
+        DELETE FROM registration_tokens
+        WHERE registration_id = ? AND expires_at IS NOT NULL AND expires_at < ?
+      `).run(registrationId, new Date().toISOString());
+      db.prepare(`
+        DELETE FROM registration_tokens
+        WHERE registration_id = ? AND token_hash NOT IN (
+          SELECT token_hash FROM registration_tokens
+          WHERE registration_id = ?
+          ORDER BY COALESCE(expires_at, '9999') DESC, rowid DESC
+          LIMIT ?
+        )
+      `).run(registrationId, registrationId, MAX_TOKENS_PER_REGISTRATION);
+    })();
     return token;
+  },
+
+  // When duplicate sign-ups are merged, links to the removed ones keep
+  // working by pointing at the sign-up that remains.
+  moveRegistrationTokens: (fromRegistrationId, toRegistrationId) => {
+    db.prepare(`UPDATE registration_tokens SET registration_id = ? WHERE registration_id = ?`)
+      .run(toRegistrationId, fromRegistrationId);
   },
 
   setHeldPicks: (registrationId, picks) => {
@@ -1896,6 +1951,7 @@ const publicDal = {
         db.prepare(`DELETE FROM potluck_assignments WHERE participant_id IN (${placeholders})`).run(ids);
         db.prepare(`DELETE FROM participants WHERE participant_id IN (${placeholders})`).run(ids);
       }
+      db.prepare(`DELETE FROM registration_tokens WHERE registration_id = ?`).run(rid);
       db.prepare(`DELETE FROM registrations WHERE registration_id = ?`).run(rid);
       return true;
     });

@@ -889,6 +889,7 @@ function mergeRegistrationsForEmail(eventId, email, primaryIdHint) {
 
   // Clean up duplicates after merging so capacity counts stay correct.
   extras.forEach(reg => {
+    dal.public.moveRegistrationTokens(reg.registration_id, primary.registration_id);
     try { dal.public.deleteRegistrationCascade(reg.registration_id); } catch (_) {}
   });
 }

@@ -73,6 +73,15 @@ CREATE TABLE IF NOT EXISTS registrations (
 CREATE INDEX IF NOT EXISTS idx_registrations_event ON registrations(event_id);
 CREATE INDEX IF NOT EXISTS idx_registrations_token ON registrations(manage_token_hash);
 
+CREATE TABLE IF NOT EXISTS registration_tokens (
+    token_hash TEXT PRIMARY KEY,
+    registration_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at TEXT,
+    FOREIGN KEY (registration_id) REFERENCES registrations(registration_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_registration_tokens_registration ON registration_tokens(registration_id);
+
 CREATE TABLE IF NOT EXISTS participants (
     participant_id INTEGER PRIMARY KEY,
     registration_id INTEGER NOT NULL,
